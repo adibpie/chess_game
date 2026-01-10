@@ -97,5 +97,5 @@ AI_MINIMAX = 'minimax'
 AI_STOCKFISH = 'stockfish'
 
 # Server configuration (default to localhost for development)
-SERVER_URL = 'http://localhost:5000'
-WS_URL = 'ws://localhost:5000'
+SERVER_URL = 'https://chess-gg.up.railway.app'
+WS_URL = 'wss://chess-gg.up.railway.app'

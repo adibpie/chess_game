@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chess Game - Online</title>
+    <title>Chess Game - Retro Edition</title>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <style>
         * {
@@ -12,29 +12,52 @@
             box-sizing: border-box;
         }
         
+        @keyframes pixelate {
+            0%, 100% { image-rendering: pixelated; }
+        }
+        
         body {
-            font-family: Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Courier New', monospace;
+            background: #141428;
+            background-image: 
+                linear-gradient(rgba(30, 30, 50, 0.5) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(30, 30, 50, 0.5) 1px, transparent 1px);
+            background-size: 20px 20px;
             min-height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
             padding: 20px;
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
         }
         
         .container {
-            background: white;
-            border-radius: 10px;
+            background: #141428;
+            border: 5px solid #ffff00;
             padding: 30px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
             max-width: 1200px;
             width: 100%;
+            box-shadow: 0 0 20px rgba(255, 255, 0, 0.3);
         }
         
         h1 {
             text-align: center;
-            color: #333;
+            color: #ffff00;
+            margin-bottom: 10px;
+            font-size: 48px;
+            text-shadow: 3px 3px 0px #000, -1px -1px 0px #fff;
+            letter-spacing: 3px;
+            image-rendering: pixelated;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #c8c8c8;
             margin-bottom: 30px;
+            font-size: 24px;
+            letter-spacing: 2px;
         }
         
         .menu-screen {
@@ -44,31 +67,81 @@
         .menu-button {
             display: block;
             width: 100%;
-            max-width: 400px;
-            margin: 15px auto;
-            padding: 15px 30px;
-            font-size: 18px;
-            background: #667eea;
-            color: white;
+            max-width: 500px;
+            margin: 20px auto;
+            padding: 20px 30px;
+            font-size: 24px;
+            font-weight: bold;
+            font-family: 'Courier New', monospace;
+            color: #000;
             border: none;
-            border-radius: 5px;
             cursor: pointer;
-            transition: background 0.3s;
+            letter-spacing: 2px;
+            position: relative;
+            image-rendering: pixelated;
+            transition: transform 0.1s;
         }
         
-        .menu-button:hover {
-            background: #5568d3;
+        .menu-button:active {
+            transform: translate(2px, 2px);
+        }
+        
+        .menu-button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            border: 3px solid #000;
+            border-top-color: #fff;
+            border-left-color: #fff;
+            border-bottom-color: #666;
+            border-right-color: #666;
+        }
+        
+        .menu-button:hover::before {
+            border-top-color: #fff;
+            border-left-color: #fff;
+            border-bottom-color: #888;
+            border-right-color: #888;
+        }
+        
+        .btn-pvp {
+            background: #6495ed;
+        }
+        
+        .btn-ai {
+            background: #90ee90;
+        }
+        
+        .btn-online {
+            background: #ffd700;
+        }
+        
+        .btn-back {
+            background: #c0c0c0;
         }
         
         .room-input {
             width: 100%;
             max-width: 400px;
-            padding: 10px;
-            margin: 10px auto;
+            padding: 15px;
+            margin: 20px auto;
             display: block;
-            font-size: 16px;
-            border: 2px solid #ddd;
-            border-radius: 5px;
+            font-size: 20px;
+            font-family: 'Courier New', monospace;
+            background: #000;
+            color: #ffff00;
+            border: 3px solid #ffff00;
+            text-align: center;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+        }
+        
+        .room-input:focus {
+            outline: none;
+            border-color: #fff;
         }
         
         .game-board {
@@ -78,7 +151,8 @@
             width: 640px;
             height: 640px;
             margin: 20px auto;
-            border: 3px solid #333;
+            border: 5px solid #ffff00;
+            image-rendering: pixelated;
         }
         
         .square {
@@ -101,6 +175,7 @@
         
         .square.selected {
             background: #ff6b6b !important;
+            border: 3px solid #000;
         }
         
         .square.valid-move {
@@ -111,19 +186,27 @@
             font-size: 60px;
             cursor: pointer;
             user-select: none;
+            image-rendering: pixelated;
+            filter: drop-shadow(2px 2px 0px #000);
         }
         
         .game-info {
             text-align: center;
             margin: 20px 0;
-            font-size: 18px;
+            font-size: 20px;
+            color: #ffff00;
+            font-family: 'Courier New', monospace;
         }
         
         .status-message {
-            padding: 10px;
-            margin: 10px 0;
-            border-radius: 5px;
-            background: #e3f2fd;
+            padding: 15px;
+            margin: 15px 0;
+            border: 3px solid #ffff00;
+            background: #000;
+            color: #ffff00;
+            font-family: 'Courier New', monospace;
+            font-size: 18px;
+            letter-spacing: 1px;
         }
         
         .hidden {
@@ -131,37 +214,82 @@
         }
         
         .room-code-display {
-            background: #f5f5f5;
-            padding: 15px;
-            border-radius: 5px;
+            background: #000;
+            padding: 20px;
+            border: 3px solid #ffff00;
             margin: 20px 0;
+            text-align: center;
         }
         
         .room-code-display code {
-            font-size: 24px;
+            font-size: 32px;
             font-weight: bold;
-            color: #667eea;
+            color: #ffff00;
+            font-family: 'Courier New', monospace;
+            letter-spacing: 5px;
+        }
+        
+        .difficulty-selector {
+            margin: 20px 0;
+            color: #ffff00;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .difficulty-selector button {
+            background: #000;
+            color: #ffff00;
+            border: 3px solid #ffff00;
+            padding: 10px 20px;
+            font-size: 24px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            margin: 0 10px;
+        }
+        
+        .difficulty-selector button:hover {
+            background: #ffff00;
+            color: #000;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>♟️ Chess Game Online</h1>
+        <h1>♟️ CHESS GAME</h1>
+        <div class="subtitle">RETRO EDITION</div>
         
-        <!-- Menu Screen -->
+        <!-- Main Menu Screen -->
         <div id="menuScreen" class="menu-screen">
-            <button class="menu-button" onclick="createRoom()">Create Room</button>
-            <button class="menu-button" onclick="showJoinRoom()">Join Room</button>
-            <div id="joinRoomDiv" class="hidden">
-                <input type="text" id="roomCodeInput" class="room-input" placeholder="Enter Room Code" maxlength="6">
-                <button class="menu-button" onclick="joinRoom()">Join</button>
+            <button class="menu-button btn-pvp" onclick="startLocalPvP()">LOCAL PVP</button>
+            <button class="menu-button btn-ai" onclick="showAISelection()">PLAY VS AI</button>
+            <button class="menu-button btn-online" onclick="showOnlineMenu()">ONLINE MULTIPLAYER</button>
+        </div>
+        
+        <!-- AI Selection Screen -->
+        <div id="aiScreen" class="menu-screen hidden">
+            <button class="menu-button btn-pvp" onclick="startAI('minimax')">MINIMAX AI</button>
+            <button class="menu-button btn-ai" onclick="startAI('stockfish')">STOCKFISH AI</button>
+            <div id="difficultySelector" class="difficulty-selector hidden">
+                <button onclick="changeDifficulty(-1)">◄</button>
+                <span id="difficultyText">DIFFICULTY (DEPTH): 3</span>
+                <button onclick="changeDifficulty(1)">►</button>
             </div>
+            <button class="menu-button btn-back" onclick="showMainMenu()">BACK</button>
+        </div>
+        
+        <!-- Online Menu Screen -->
+        <div id="onlineScreen" class="menu-screen hidden">
+            <button class="menu-button btn-pvp" onclick="createRoom()">CREATE ROOM</button>
+            <button class="menu-button btn-ai" onclick="showJoinRoom()">JOIN ROOM</button>
+            <div id="joinRoomDiv" class="hidden">
+                <input type="text" id="roomCodeInput" class="room-input" placeholder="ENTER ROOM CODE" maxlength="6" onkeypress="if(event.key==='Enter') joinRoom()">
+            </div>
+            <button class="menu-button btn-back" onclick="showMainMenu()">BACK</button>
         </div>
         
         <!-- Game Screen -->
         <div id="gameScreen" class="hidden">
-            <div class="room-code-display">
-                Room Code: <code id="roomCodeDisplay"></code>
+            <div class="room-code-display" id="roomCodeDisplay" style="display: none;">
+                Room Code: <code id="roomCodeText"></code>
             </div>
             <div class="game-info">
                 <div id="statusMessage" class="status-message">Waiting for opponent...</div>
@@ -172,7 +300,11 @@
     </div>
     
     <script>
-        const socket = io();
+        // Server URL - use current origin for WebSocket connection
+        const serverUrl = window.location.origin;
+        const socket = io(serverUrl, {
+            transports: ['websocket', 'polling']
+        });
         let roomCode = null;
         let playerColor = null;
         let board = [];
@@ -185,6 +317,8 @@
             blackLocations: [],
             turnStep: 0
         };
+        let currentMode = null;
+        let aiDifficulty = 3;
         
         const pieceSymbols = {
             'white': {
@@ -197,7 +331,71 @@
             }
         };
         
-        // Initialize board
+        // Menu Navigation
+        function showMainMenu() {
+            document.getElementById('menuScreen').classList.remove('hidden');
+            document.getElementById('aiScreen').classList.add('hidden');
+            document.getElementById('onlineScreen').classList.add('hidden');
+            document.getElementById('gameScreen').classList.add('hidden');
+        }
+        
+        function showAISelection() {
+            document.getElementById('menuScreen').classList.add('hidden');
+            document.getElementById('aiScreen').classList.remove('hidden');
+            document.getElementById('difficultySelector').classList.remove('hidden');
+        }
+        
+        function showOnlineMenu() {
+            document.getElementById('menuScreen').classList.add('hidden');
+            document.getElementById('onlineScreen').classList.remove('hidden');
+        }
+        
+        function showJoinRoom() {
+            document.getElementById('joinRoomDiv').classList.remove('hidden');
+        }
+        
+        function startLocalPvP() {
+            currentMode = 'local';
+            document.getElementById('menuScreen').classList.add('hidden');
+            document.getElementById('gameScreen').classList.remove('hidden');
+            initializeGameState();
+            initBoard();
+            updateBoardDisplay();
+            updateStatus('Local PvP - White to move');
+        }
+        
+        function startAI(type) {
+            // For web version, we'll use a simple AI (minimax-like)
+            // Full Stockfish would require server-side processing
+            currentMode = 'ai';
+            playerColor = 'white';
+            document.getElementById('aiScreen').classList.add('hidden');
+            document.getElementById('gameScreen').classList.remove('hidden');
+            initializeGameState();
+            initBoard();
+            updateBoardDisplay();
+            updateStatus('Playing vs AI - Your turn (White)');
+        }
+        
+        function changeDifficulty(delta) {
+            aiDifficulty = Math.max(1, Math.min(5, aiDifficulty + delta));
+            document.getElementById('difficultyText').textContent = `DIFFICULTY (DEPTH): ${aiDifficulty}`;
+        }
+        
+        function createRoom() {
+            socket.emit('create_room');
+        }
+        
+        function joinRoom() {
+            const code = document.getElementById('roomCodeInput').value.toUpperCase();
+            if (code.length === 6) {
+                socket.emit('join_room', { room_code: code });
+            } else {
+                alert('Please enter a valid 6-character room code');
+            }
+        }
+        
+        // Board Functions
         function initBoard() {
             const boardDiv = document.getElementById('gameBoard');
             boardDiv.innerHTML = '';
@@ -217,42 +415,26 @@
             }
         }
         
-        function createRoom() {
-            socket.emit('create_room');
-        }
-        
-        function showJoinRoom() {
-            document.getElementById('joinRoomDiv').classList.remove('hidden');
-        }
-        
-        function joinRoom() {
-            const code = document.getElementById('roomCodeInput').value.toUpperCase();
-            if (code.length === 6) {
-                socket.emit('join_room', { room_code: code });
-            } else {
-                alert('Please enter a valid 6-character room code');
-            }
-        }
-        
         function handleSquareClick(row, col) {
-            if (!playerColor) return;
+            if (currentMode === 'online' && !playerColor) return;
             
-            const isMyTurn = (playerColor === 'white' && gameState.turnStep < 2) ||
-                            (playerColor === 'black' && gameState.turnStep >= 2);
+            const isMyTurn = currentMode === 'local' || 
+                            (currentMode === 'ai' && gameState.turnStep < 2) ||
+                            (currentMode === 'online' && ((playerColor === 'white' && gameState.turnStep < 2) || 
+                                                          (playerColor === 'black' && gameState.turnStep >= 2)));
             
-            if (!isMyTurn) return;
+            if (!isMyTurn && currentMode !== 'local') return;
             
             const piece = getPieceAt(row, col);
-            const isMyPiece = piece && piece.color === playerColor;
+            const isMyPiece = piece && ((currentMode === 'local') || 
+                                       (currentMode === 'ai' && piece.color === 'white') ||
+                                       (currentMode === 'online' && piece.color === playerColor));
             
             if (selectedSquare && validMoves.some(m => m[0] === row && m[1] === col)) {
-                // Make move
-                const fromRow = selectedSquare[0];
-                const fromCol = selectedSquare[1];
+                const [fromRow, fromCol] = selectedSquare;
                 makeMove(fromRow, fromCol, row, col);
                 clearSelection();
             } else if (isMyPiece) {
-                // Select piece
                 selectedSquare = [row, col];
                 updateValidMoves(row, col);
                 updateBoardDisplay();
@@ -262,44 +444,135 @@
         }
         
         function getPieceAt(row, col) {
-            // Check white pieces
             for (let i = 0; i < gameState.whiteLocations.length; i++) {
                 const loc = gameState.whiteLocations[i];
                 if (loc[0] === col && loc[1] === row) {
-                    return {
-                        color: 'white',
-                        type: gameState.whitePieces[i]
-                    };
+                    return { color: 'white', type: gameState.whitePieces[i] };
                 }
             }
-            // Check black pieces
             for (let i = 0; i < gameState.blackLocations.length; i++) {
                 const loc = gameState.blackLocations[i];
                 if (loc[0] === col && loc[1] === row) {
-                    return {
-                        color: 'black',
-                        type: gameState.blackPieces[i]
-                    };
+                    return { color: 'black', type: gameState.blackPieces[i] };
                 }
             }
             return null;
         }
         
         function updateValidMoves(row, col) {
-            // Simplified - in real implementation, calculate valid moves
+            // Simplified - calculate valid moves based on piece type
             validMoves = [];
-            // This would need to communicate with server or calculate client-side
+            const piece = getPieceAt(row, col);
+            if (!piece) return;
+            
+            // Basic move calculation (simplified)
+            // In a full implementation, this would check all rules
+            const directions = {
+                'pawn': piece.color === 'white' ? [[0, 1], [0, 2], [-1, 1], [1, 1]] : [[0, -1], [0, -2], [-1, -1], [1, -1]],
+                'rook': [[0, 1], [0, -1], [1, 0], [-1, 0]],
+                'knight': [[1, 2], [2, 1], [-1, 2], [2, -1], [1, -2], [-2, 1], [-1, -2], [-2, -1]],
+                'bishop': [[1, 1], [1, -1], [-1, 1], [-1, -1]],
+                'queen': [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]],
+                'king': [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]]
+            };
+            
+            const moves = directions[piece.type] || [];
+            for (const [dx, dy] of moves) {
+                const newRow = row + dy;
+                const newCol = col + dx;
+                if (newRow >= 0 && newRow < 8 && newCol >= 0 && newCol < 8) {
+                    const targetPiece = getPieceAt(newRow, newCol);
+                    if (!targetPiece || targetPiece.color !== piece.color) {
+                        validMoves.push([newRow, newCol]);
+                    }
+                }
+            }
         }
         
         function makeMove(fromRow, fromCol, toRow, toCol) {
             const fromPos = [fromCol, fromRow];
             const toPos = [toCol, toRow];
             
-            socket.emit('make_move', {
-                room_code: roomCode,
-                from_pos: fromPos,
-                to_pos: toPos
-            });
+            // Update local game state
+            updateLocalMove(fromPos, toPos);
+            
+            if (currentMode === 'online') {
+                socket.emit('make_move', {
+                    room_code: roomCode,
+                    from_pos: fromPos,
+                    to_pos: toPos
+                });
+            } else if (currentMode === 'ai' && gameState.turnStep >= 2) {
+                // AI's turn - make a simple move (in full version, this would call server AI)
+                setTimeout(() => {
+                    makeAIMove();
+                }, 2000);
+            }
+        }
+        
+        function updateLocalMove(fromPos, toPos) {
+            // Find and move piece
+            const [fromCol, fromRow] = fromPos;
+            const [toCol, toRow] = toPos;
+            
+            // Check white pieces
+            for (let i = 0; i < gameState.whiteLocations.length; i++) {
+                const loc = gameState.whiteLocations[i];
+                if (loc[0] === fromCol && loc[1] === fromRow) {
+                    gameState.whiteLocations[i] = [toCol, toRow];
+                    // Check for capture
+                    for (let j = gameState.blackLocations.length - 1; j >= 0; j--) {
+                        const blackLoc = gameState.blackLocations[j];
+                        if (blackLoc[0] === toCol && blackLoc[1] === toRow) {
+                            gameState.blackPieces.splice(j, 1);
+                            gameState.blackLocations.splice(j, 1);
+                        }
+                    }
+                    gameState.turnStep = 2;
+                    updateBoardDisplay();
+                    return;
+                }
+            }
+            
+            // Check black pieces
+            for (let i = 0; i < gameState.blackLocations.length; i++) {
+                const loc = gameState.blackLocations[i];
+                if (loc[0] === fromCol && loc[1] === fromRow) {
+                    gameState.blackLocations[i] = [toCol, toRow];
+                    // Check for capture
+                    for (let j = gameState.whiteLocations.length - 1; j >= 0; j--) {
+                        const whiteLoc = gameState.whiteLocations[j];
+                        if (whiteLoc[0] === toCol && whiteLoc[1] === toRow) {
+                            gameState.whitePieces.splice(j, 1);
+                            gameState.whiteLocations.splice(j, 1);
+                        }
+                    }
+                    gameState.turnStep = 0;
+                    updateBoardDisplay();
+                    return;
+                }
+            }
+        }
+        
+        function makeAIMove() {
+            // Simple AI move (random valid move)
+            // In full version, this would use minimax or call server
+            const moves = [];
+            for (let i = 0; i < gameState.blackLocations.length; i++) {
+                const loc = gameState.blackLocations[i];
+                // Simple move: move pawn forward if possible
+                if (gameState.blackPieces[i] === 'pawn' && loc[1] > 0) {
+                    const newLoc = [loc[0], loc[1] - 1];
+                    if (!getPieceAt(newLoc[1], newLoc[0])) {
+                        moves.push([loc, newLoc]);
+                    }
+                }
+            }
+            if (moves.length > 0) {
+                const move = moves[Math.floor(Math.random() * moves.length)];
+                updateLocalMove(move[0], move[1]);
+                updateStatus('AI is thinking...');
+            }
         }
         
         function clearSelection() {
@@ -309,7 +582,6 @@
         }
         
         function updateBoardDisplay() {
-            // Clear board
             for (let row = 0; row < 8; row++) {
                 for (let col = 0; col < 8; col++) {
                     const square = board[row][col];
@@ -319,11 +591,9 @@
                 }
             }
             
-            // Draw pieces
             drawPieces('white');
             drawPieces('black');
             
-            // Highlight selected square
             if (selectedSquare) {
                 const [row, col] = selectedSquare;
                 board[row][col].classList.add('selected');
@@ -349,54 +619,7 @@
             }
         }
         
-        // Socket event handlers
-        socket.on('connect', () => {
-            console.log('Connected to server');
-        });
-        
-        socket.on('room_created', (data) => {
-            roomCode = data.room_code;
-            playerColor = data.color;
-            document.getElementById('roomCodeDisplay').textContent = roomCode;
-            document.getElementById('menuScreen').classList.add('hidden');
-            document.getElementById('gameScreen').classList.remove('hidden');
-            document.getElementById('statusMessage').textContent = 'Waiting for opponent...';
-            initBoard();
-        });
-        
-        socket.on('joined_room', (data) => {
-            roomCode = data.room_code;
-            playerColor = data.color;
-            document.getElementById('roomCodeDisplay').textContent = roomCode;
-            document.getElementById('menuScreen').classList.add('hidden');
-            document.getElementById('gameScreen').classList.remove('hidden');
-            if (data.status === 'ready') {
-                document.getElementById('statusMessage').textContent = 'Game starting!';
-            } else {
-                document.getElementById('statusMessage').textContent = 'Waiting for opponent...';
-            }
-            initBoard();
-        });
-        
-        socket.on('game_start', () => {
-            document.getElementById('statusMessage').textContent = 'Game started!';
-            initializeGameState();
-            updateBoardDisplay();
-        });
-        
-        socket.on('opponent_move', (data) => {
-            // Update game state with opponent's move
-            // This is simplified - would need proper game state sync
-            updateBoardDisplay();
-        });
-        
-        socket.on('game_state_update', (data) => {
-            gameState = data.game_state;
-            updateBoardDisplay();
-        });
-        
         function initializeGameState() {
-            // Initialize starting position
             gameState = {
                 whitePieces: ['rook', 'knight', 'bishop', 'king', 'queen', 'bishop', 'knight', 'rook',
                              'pawn', 'pawn', 'pawn', 'pawn', 'pawn', 'pawn', 'pawn', 'pawn'],
@@ -409,6 +632,61 @@
                 turnStep: 0
             };
         }
+        
+        function updateStatus(message) {
+            document.getElementById('statusMessage').textContent = message;
+        }
+        
+        // Socket event handlers
+        socket.on('connect', () => {
+            console.log('Connected to server');
+        });
+        
+        socket.on('room_created', (data) => {
+            roomCode = data.room_code;
+            playerColor = data.color;
+            currentMode = 'online';
+            document.getElementById('roomCodeText').textContent = roomCode;
+            document.getElementById('roomCodeDisplay').style.display = 'block';
+            document.getElementById('onlineScreen').classList.add('hidden');
+            document.getElementById('gameScreen').classList.remove('hidden');
+            updateStatus('Waiting for opponent...');
+            initializeGameState();
+            initBoard();
+        });
+        
+        socket.on('joined_room', (data) => {
+            roomCode = data.room_code;
+            playerColor = data.color;
+            currentMode = 'online';
+            document.getElementById('roomCodeText').textContent = roomCode;
+            document.getElementById('roomCodeDisplay').style.display = 'block';
+            document.getElementById('onlineScreen').classList.add('hidden');
+            document.getElementById('gameScreen').classList.remove('hidden');
+            if (data.status === 'ready') {
+                updateStatus('Game starting!');
+            } else {
+                updateStatus('Waiting for opponent...');
+            }
+            initializeGameState();
+            initBoard();
+        });
+        
+        socket.on('game_start', () => {
+            updateStatus('Game started!');
+            initializeGameState();
+            updateBoardDisplay();
+        });
+        
+        socket.on('opponent_move', (data) => {
+            updateLocalMove(data.from_pos, data.to_pos);
+            updateStatus('Opponent moved');
+        });
+        
+        socket.on('game_state_update', (data) => {
+            gameState = data.game_state;
+            updateBoardDisplay();
+        });
     </script>
 </body>
 </html>

@@ -22,7 +22,7 @@ def generate_room_code():
 @app.route('/')
 def index():
     """Serve the web interface"""
-    return render_template('index.html')
+    return render_template('index.html', server_url=request.host_url.rstrip('/'))
 
 @app.route('/play/<room_code>')
 def play_room(room_code):

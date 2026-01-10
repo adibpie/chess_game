@@ -536,7 +536,7 @@ def reset_game():
     game_state.reset_game()
     # Clear AI thinking state
     if hasattr(game_state, 'ai_thinking'):
-        delattr(game_state, 'ai_thinking')
+        game_state.ai_thinking = False
     if hasattr(game_state, 'ai_think_start_time'):
         delattr(game_state, 'ai_think_start_time')
     # Update options after reset
@@ -609,6 +609,8 @@ while run:
                     # Import AI engine here to avoid circular imports
                     from ai_engine import MinimaxAI
                     ai_opponent = MinimaxAI(menu.ai_difficulty)
+                    # Initialize AI thinking state
+                    game_state.ai_thinking = False
                 elif clicked == 'stockfish':
                     current_mode = GAME_MODE_AI
                     menu.ai_type = AI_STOCKFISH
@@ -616,6 +618,8 @@ while run:
                     reset_game()
                     from ai_engine import StockfishAI
                     ai_opponent = StockfishAI()
+                    # Initialize AI thinking state
+                    game_state.ai_thinking = False
                 elif clicked == 'back':
                     menu.showing_ai_selection = False
                     menu.entering_room_code = False
@@ -654,20 +658,29 @@ while run:
         # Handle AI moves
         if current_mode == GAME_MODE_AI and not game_over and turn_step >= 2 and ai_opponent:
             # AI's turn (black) - show thinking status
-            if not hasattr(game_state, 'ai_thinking'):
+            if not hasattr(game_state, 'ai_thinking') or not game_state.ai_thinking:
                 game_state.ai_thinking = True
                 game_state.ai_think_start_time = pygame.time.get_ticks()
             
             # Wait 2 seconds before making move
-            elapsed = pygame.time.get_ticks() - game_state.ai_think_start_time
-            if elapsed >= 2000:  # 2 seconds
-                move = ai_opponent.get_move(game_state)
-                if move:
-                    from_pos, to_pos = move
-                    game_state.make_move(from_pos, to_pos)
-                    sync_globals()
-                game_state.ai_thinking = False
-                delattr(game_state, 'ai_think_start_time')
+            if hasattr(game_state, 'ai_think_start_time'):
+                elapsed = pygame.time.get_ticks() - game_state.ai_think_start_time
+                if elapsed >= 2000:  # 2 seconds
+                    move = ai_opponent.get_move(game_state)
+                    if move:
+                        from_pos, to_pos = move
+                        success = game_state.make_move(from_pos, to_pos)
+                        if success:
+                            sync_globals()
+                            # Reset AI thinking state for next turn
+                            game_state.ai_thinking = False
+                            if hasattr(game_state, 'ai_think_start_time'):
+                                delattr(game_state, 'ai_think_start_time')
+                    else:
+                        # If no move found, reset thinking state
+                        game_state.ai_thinking = False
+                        if hasattr(game_state, 'ai_think_start_time'):
+                            delattr(game_state, 'ai_think_start_time')
         
         # Handle online moves (WebSocket handles messages asynchronously)
         if current_mode == GAME_MODE_ONLINE and online_client:
