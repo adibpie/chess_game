@@ -28,6 +28,7 @@
             background: darkgray;
             width: 1000px;
             height: 900px;
+            max-width: 100%;
         }
         
         .board-container {
@@ -35,6 +36,7 @@
             width: 800px;
             height: 900px;
             flex-shrink: 0;
+            max-width: 100%;
         }
         
         .game-board {
@@ -45,6 +47,7 @@
             height: 800px;
             border: 2px solid black;
             background: #f0d9b5;
+            max-width: 100%;
         }
         
         .square {
@@ -152,6 +155,7 @@
             color: black;
             font-weight: bold;
             z-index: 100;
+            max-width: 100%;
         }
         
         .turn-indicator {
@@ -202,6 +206,8 @@
             text-align: center;
             background: darkgray;
             padding: 50px;
+            width: 100%;
+            max-width: 600px;
         }
         
         .menu-button {
@@ -243,6 +249,165 @@
             margin: 20px 0;
             font-size: 24px;
             font-weight: bold;
+        }
+        
+        /* Promotion overlay */
+        .promotion-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        
+        .promotion-menu {
+            background: gray;
+            border: 5px solid gold;
+            padding: 20px;
+            display: flex;
+            gap: 10px;
+            border-radius: 10px;
+        }
+        
+        .promotion-piece {
+            width: 80px;
+            height: 80px;
+            cursor: pointer;
+            border: 3px solid black;
+            background: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 60px;
+        }
+        
+        .promotion-piece:hover {
+            background: lightblue;
+            border-color: blue;
+        }
+        
+        /* Mobile Responsive */
+        @media (max-width: 1024px) {
+            .game-container {
+                flex-direction: column;
+                width: 100%;
+                height: auto;
+                max-width: 100vw;
+            }
+            
+            .board-container {
+                width: 100%;
+                height: auto;
+                max-width: 100vw;
+            }
+            
+            .game-board {
+                width: 100%;
+                max-width: 100vw;
+                grid-template-columns: repeat(8, 12.5vw);
+                grid-template-rows: repeat(8, 12.5vw);
+            }
+            
+            .square {
+                width: 12.5vw;
+                height: 12.5vw;
+            }
+            
+            .piece-img {
+                width: 10vw;
+                height: 10vw;
+            }
+            
+            .piece-img.pawn {
+                width: 8vw;
+                height: 8vw;
+            }
+            
+            .status-bar {
+                width: 100%;
+                max-width: 100vw;
+                height: 80px;
+                font-size: 20px;
+                padding: 0 10px;
+            }
+            
+            .turn-indicator {
+                font-size: 24px;
+                padding: 3px 10px;
+                margin-right: 10px;
+            }
+            
+            .forfeit-button {
+                font-size: 16px;
+                padding: 3px 10px;
+                right: 5px;
+            }
+            
+            .sidebar {
+                width: 100%;
+                height: auto;
+                max-height: 200px;
+                flex-direction: row;
+                justify-content: space-around;
+                padding: 10px;
+            }
+            
+            .captured-section {
+                margin-bottom: 0;
+                margin-right: 10px;
+            }
+            
+            .captured-pieces {
+                flex-direction: row;
+                flex-wrap: wrap;
+            }
+            
+            .menu-screen {
+                padding: 20px;
+            }
+            
+            .menu-button {
+                font-size: 18px;
+                padding: 15px 20px;
+            }
+        }
+        
+        @media (max-width: 600px) {
+            .game-board {
+                grid-template-columns: repeat(8, 12.5vw);
+                grid-template-rows: repeat(8, 12.5vw);
+            }
+            
+            .status-bar {
+                font-size: 16px;
+                height: 60px;
+            }
+            
+            .turn-indicator {
+                font-size: 18px;
+                padding: 2px 8px;
+            }
+            
+            .forfeit-button {
+                font-size: 14px;
+                padding: 2px 8px;
+            }
+            
+            .promotion-menu {
+                flex-wrap: wrap;
+                max-width: 90vw;
+            }
+            
+            .promotion-piece {
+                width: 60px;
+                height: 60px;
+                font-size: 40px;
+            }
         }
     </style>
 </head>
@@ -288,6 +453,11 @@
         </div>
     </div>
     
+    <!-- Promotion Overlay -->
+    <div id="promotionOverlay" class="promotion-overlay hidden">
+        <div class="promotion-menu" id="promotionMenu"></div>
+    </div>
+    
     <script>
         const socket = io(window.location.origin, {
             transports: ['websocket', 'polling']
@@ -298,6 +468,7 @@
         let board = [];
         let selectedSquare = null;
         let validMoves = [];
+        let pendingPromotion = null; // {pieceIndex, color, location}
         let gameState = {
             whitePieces: [],
             whiteLocations: [],
@@ -307,7 +478,9 @@
             capturedPiecesBlack: [],
             turnStep: 0,
             gameOver: false,
-            winner: ''
+            winner: '',
+            whiteEp: [100, 100],
+            blackEp: [100, 100]
         };
         let currentMode = null;
         
@@ -350,6 +523,12 @@
             }
         };
         
+        const promotionPieces = ['queen', 'rook', 'bishop', 'knight'];
+        const promotionSymbols = {
+            'white': {'queen': '♕', 'rook': '♖', 'bishop': '♗', 'knight': '♘'},
+            'black': {'queen': '♛', 'rook': '♜', 'bishop': '♝', 'knight': '♞'}
+        };
+        
         // Menu Functions
         function startLocalPvP() {
             currentMode = 'local';
@@ -384,7 +563,6 @@
             if (confirm('Are you sure you want to forfeit?')) {
                 if (currentMode === 'online' && roomCode) {
                     socket.emit('forfeit', { room_code: roomCode });
-                    // Also update local state
                     const forfeitingColor = (playerColor === 'white' && gameState.turnStep < 2) || 
                                           (playerColor === 'black' && gameState.turnStep >= 2);
                     gameState.winner = forfeitingColor ? (playerColor === 'white' ? 'black' : 'white') : playerColor;
@@ -392,7 +570,6 @@
                     updateBoardDisplay();
                     updateStatus();
                 } else {
-                    // Local PvP mode
                     if (gameState.turnStep < 2) {
                         gameState.winner = 'black';
                     } else {
@@ -414,21 +591,21 @@
                     return;
                 }
             }
-            // Reset state
             currentMode = null;
             roomCode = null;
             playerColor = null;
             selectedSquare = null;
             validMoves = [];
             gameState = {};
+            pendingPromotion = null;
             
-            // Show menu, hide game
             document.getElementById('gameScreen').classList.add('hidden');
             document.getElementById('menuScreen').classList.remove('hidden');
             document.getElementById('onlineMenu').classList.add('hidden');
             document.getElementById('joinRoomDiv').classList.add('hidden');
             document.getElementById('roomCodeDisplay').style.display = 'none';
             document.getElementById('roomCodeInput').value = '';
+            document.getElementById('promotionOverlay').classList.add('hidden');
         }
         
         // Board Functions
@@ -437,12 +614,10 @@
             boardDiv.innerHTML = '';
             board = [];
             
-            // Create all 8 rows and 8 columns (64 squares total)
             for (let row = 0; row < 8; row++) {
                 board[row] = [];
                 for (let col = 0; col < 8; col++) {
                     const square = document.createElement('div');
-                    // Checkerboard pattern: light squares when (row + col) is even
                     const isLight = (row + col) % 2 === 0;
                     square.className = `square ${isLight ? 'light' : 'dark'}`;
                     square.dataset.row = row;
@@ -452,15 +627,11 @@
                     board[row][col] = square;
                 }
             }
-            
-            // Verify we created 64 squares
-            console.log(`Board initialized: ${boardDiv.children.length} squares (should be 64)`);
         }
         
         function handleSquareClick(row, col) {
-            if (gameState.gameOver) return;
+            if (gameState.gameOver || pendingPromotion) return;
             
-            // Check if it's the player's turn
             const isWhiteTurn = gameState.turnStep < 2;
             const isMyTurn = currentMode === 'local' || 
                             (currentMode === 'online' && ((playerColor === 'white' && isWhiteTurn) || 
@@ -473,7 +644,6 @@
             
             const piece = getPieceAt(row, col);
             
-            // In local mode, check if piece matches current turn
             if (currentMode === 'local') {
                 if (piece) {
                     const pieceIsWhite = piece.color === 'white';
@@ -484,7 +654,6 @@
                 }
             }
             
-            // In online mode, check if piece belongs to player
             const isMyPiece = currentMode === 'local' || 
                              (piece && ((playerColor === 'white' && piece.color === 'white') ||
                                        (playerColor === 'black' && piece.color === 'black')));
@@ -507,13 +676,13 @@
             for (let i = 0; i < gameState.whiteLocations.length; i++) {
                 const loc = gameState.whiteLocations[i];
                 if (loc[0] === col && loc[1] === row) {
-                    return { color: 'white', type: gameState.whitePieces[i] };
+                    return { color: 'white', type: gameState.whitePieces[i], index: i };
                 }
             }
             for (let i = 0; i < gameState.blackLocations.length; i++) {
                 const loc = gameState.blackLocations[i];
                 if (loc[0] === col && loc[1] === row) {
-                    return { color: 'black', type: gameState.blackPieces[i] };
+                    return { color: 'black', type: gameState.blackPieces[i], index: i };
                 }
             }
             return null;
@@ -524,25 +693,24 @@
             const piece = getPieceAt(row, col);
             if (!piece) return;
             
-            // Get valid moves based on piece type - matching Python logic
             if (piece.type === 'pawn') {
                 if (piece.color === 'white') {
                     // Forward move (one square)
-                    const forwardOne = [col, row + 1];
                     if (row + 1 < 8 && !getPieceAt(row + 1, col)) {
                         validMoves.push([row + 1, col]);
                         // Double move from starting position (row 1)
-                        if (row === 1) {
-                            const forwardTwo = [col, row + 2];
-                            if (!getPieceAt(row + 2, col)) {
-                                validMoves.push([row + 2, col]);
-                            }
+                        if (row === 1 && !getPieceAt(row + 2, col)) {
+                            validMoves.push([row + 2, col]);
                         }
                     }
                     // Diagonal captures (right)
                     if (col + 1 < 8 && row + 1 < 8) {
                         const targetPiece = getPieceAt(row + 1, col + 1);
                         if (targetPiece && targetPiece.color === 'black') {
+                            validMoves.push([row + 1, col + 1]);
+                        }
+                        // En passant (right)
+                        if (gameState.blackEp[0] === col + 1 && gameState.blackEp[1] === row + 1) {
                             validMoves.push([row + 1, col + 1]);
                         }
                     }
@@ -552,24 +720,28 @@
                         if (targetPiece && targetPiece.color === 'black') {
                             validMoves.push([row + 1, col - 1]);
                         }
+                        // En passant (left)
+                        if (gameState.blackEp[0] === col - 1 && gameState.blackEp[1] === row + 1) {
+                            validMoves.push([row + 1, col - 1]);
+                        }
                     }
                 } else { // black
                     // Forward move (one square)
-                    const forwardOne = [col, row - 1];
                     if (row - 1 >= 0 && !getPieceAt(row - 1, col)) {
                         validMoves.push([row - 1, col]);
                         // Double move from starting position (row 6)
-                        if (row === 6) {
-                            const forwardTwo = [col, row - 2];
-                            if (!getPieceAt(row - 2, col)) {
-                                validMoves.push([row - 2, col]);
-                            }
+                        if (row === 6 && !getPieceAt(row - 2, col)) {
+                            validMoves.push([row - 2, col]);
                         }
                     }
                     // Diagonal captures (right)
                     if (col + 1 < 8 && row - 1 >= 0) {
                         const targetPiece = getPieceAt(row - 1, col + 1);
                         if (targetPiece && targetPiece.color === 'white') {
+                            validMoves.push([row - 1, col + 1]);
+                        }
+                        // En passant (right)
+                        if (gameState.whiteEp[0] === col + 1 && gameState.whiteEp[1] === row - 1) {
                             validMoves.push([row - 1, col + 1]);
                         }
                     }
@@ -579,10 +751,14 @@
                         if (targetPiece && targetPiece.color === 'white') {
                             validMoves.push([row - 1, col - 1]);
                         }
+                        // En passant (left)
+                        if (gameState.whiteEp[0] === col - 1 && gameState.whiteEp[1] === row - 1) {
+                            validMoves.push([row - 1, col - 1]);
+                        }
                     }
                 }
             } else {
-                // Other pieces - use direction-based movement
+                // Other pieces
                 const directions = {
                     'rook': [[0, 1], [0, -1], [1, 0], [-1, 0]],
                     'knight': [[1, 2], [2, 1], [-1, 2], [2, -1], [1, -2], [-2, 1], [-1, -2], [-2, -1]],
@@ -596,7 +772,6 @@
                 
                 for (const [dx, dy] of moves) {
                     if (isSliding) {
-                        // Sliding pieces (rook, bishop, queen)
                         for (let dist = 1; dist < 8; dist++) {
                             const newRow = row + dy * dist;
                             const newCol = col + dx * dist;
@@ -613,7 +788,6 @@
                             }
                         }
                     } else {
-                        // Non-sliding pieces (knight, king)
                         const newRow = row + dy;
                         const newCol = col + dx;
                         if (newRow >= 0 && newRow < 8 && newCol >= 0 && newCol < 8) {
@@ -631,44 +805,99 @@
             const fromPos = [fromCol, fromRow];
             const toPos = [toCol, toRow];
             
+            // Check for en passant capture
+            const isEnPassant = (gameState.turnStep < 2 && 
+                                gameState.blackEp[0] === toCol && gameState.blackEp[1] === toRow) ||
+                               (gameState.turnStep >= 2 && 
+                                gameState.whiteEp[0] === toCol && gameState.whiteEp[1] === toRow);
+            
             // Update local state
-            updateLocalMove(fromPos, toPos);
+            updateLocalMove(fromPos, toPos, isEnPassant);
             
             if (currentMode === 'online' && roomCode) {
                 socket.emit('make_move', {
                     room_code: roomCode,
                     from_pos: fromPos,
                     to_pos: toPos,
+                    is_en_passant: isEnPassant,
                     game_state: gameState
                 });
             }
         }
         
-        function updateLocalMove(fromPos, toPos) {
+        function updateLocalMove(fromPos, toPos, isEnPassant = false) {
             const [fromCol, fromRow] = fromPos;
             const [toCol, toRow] = toPos;
             const isWhiteTurn = gameState.turnStep < 2;
             
-            // Find and move white piece (only if it's white's turn)
+            // Handle en passant capture
+            if (isEnPassant) {
+                if (isWhiteTurn) {
+                    // White captures black pawn via en passant
+                    const epPawnRow = toRow - 1;
+                    for (let j = gameState.blackLocations.length - 1; j >= 0; j--) {
+                        const blackLoc = gameState.blackLocations[j];
+                        if (blackLoc[0] === toCol && blackLoc[1] === epPawnRow) {
+                            gameState.capturedPiecesWhite.push(gameState.blackPieces[j]);
+                            gameState.blackPieces.splice(j, 1);
+                            gameState.blackLocations.splice(j, 1);
+                            break;
+                        }
+                    }
+                } else {
+                    // Black captures white pawn via en passant
+                    const epPawnRow = toRow + 1;
+                    for (let j = gameState.whiteLocations.length - 1; j >= 0; j--) {
+                        const whiteLoc = gameState.whiteLocations[j];
+                        if (whiteLoc[0] === toCol && whiteLoc[1] === epPawnRow) {
+                            gameState.capturedPiecesBlack.push(gameState.whitePieces[j]);
+                            gameState.whitePieces.splice(j, 1);
+                            gameState.whiteLocations.splice(j, 1);
+                            break;
+                        }
+                    }
+                }
+            }
+            
             if (isWhiteTurn) {
                 for (let i = 0; i < gameState.whiteLocations.length; i++) {
                     const loc = gameState.whiteLocations[i];
                     if (loc[0] === fromCol && loc[1] === fromRow) {
+                        const pieceType = gameState.whitePieces[i];
                         gameState.whiteLocations[i] = [toCol, toRow];
-                        // Check for capture
-                        for (let j = gameState.blackLocations.length - 1; j >= 0; j--) {
-                            const blackLoc = gameState.blackLocations[j];
-                            if (blackLoc[0] === toCol && blackLoc[1] === toRow) {
-                                gameState.capturedPiecesWhite.push(gameState.blackPieces[j]);
-                                if (gameState.blackPieces[j] === 'king') {
-                                    gameState.winner = 'white';
-                                    gameState.gameOver = true;
+                        
+                        // Check for normal capture (if not en passant)
+                        if (!isEnPassant) {
+                            for (let j = gameState.blackLocations.length - 1; j >= 0; j--) {
+                                const blackLoc = gameState.blackLocations[j];
+                                if (blackLoc[0] === toCol && blackLoc[1] === toRow) {
+                                    gameState.capturedPiecesWhite.push(gameState.blackPieces[j]);
+                                    if (gameState.blackPieces[j] === 'king') {
+                                        gameState.winner = 'white';
+                                        gameState.gameOver = true;
+                                    }
+                                    gameState.blackPieces.splice(j, 1);
+                                    gameState.blackLocations.splice(j, 1);
+                                    break;
                                 }
-                                gameState.blackPieces.splice(j, 1);
-                                gameState.blackLocations.splice(j, 1);
                             }
                         }
-                        // Advance turn: 0->2, 1->2
+                        
+                        // Check for pawn promotion
+                        if (pieceType === 'pawn' && toRow === 7) {
+                            pendingPromotion = { pieceIndex: i, color: 'white', location: [toCol, toRow] };
+                            showPromotionMenu('white');
+                            return;
+                        }
+                        
+                        // Update en passant target
+                        if (pieceType === 'pawn' && Math.abs(fromRow - toRow) === 2) {
+                            gameState.whiteEp = [toCol, toRow - 1];
+                        } else {
+                            gameState.whiteEp = [100, 100];
+                        }
+                        gameState.blackEp = [100, 100];
+                        
                         gameState.turnStep = 2;
                         updateBoardDisplay();
                         updateCapturedPieces();
@@ -677,25 +906,44 @@
                     }
                 }
             } else {
-                // Find and move black piece (only if it's black's turn)
                 for (let i = 0; i < gameState.blackLocations.length; i++) {
                     const loc = gameState.blackLocations[i];
                     if (loc[0] === fromCol && loc[1] === fromRow) {
+                        const pieceType = gameState.blackPieces[i];
                         gameState.blackLocations[i] = [toCol, toRow];
-                        // Check for capture
-                        for (let j = gameState.whiteLocations.length - 1; j >= 0; j--) {
-                            const whiteLoc = gameState.whiteLocations[j];
-                            if (whiteLoc[0] === toCol && whiteLoc[1] === toRow) {
-                                gameState.capturedPiecesBlack.push(gameState.whitePieces[j]);
-                                if (gameState.whitePieces[j] === 'king') {
-                                    gameState.winner = 'black';
-                                    gameState.gameOver = true;
+                        
+                        // Check for normal capture (if not en passant)
+                        if (!isEnPassant) {
+                            for (let j = gameState.whiteLocations.length - 1; j >= 0; j--) {
+                                const whiteLoc = gameState.whiteLocations[j];
+                                if (whiteLoc[0] === toCol && whiteLoc[1] === toRow) {
+                                    gameState.capturedPiecesBlack.push(gameState.whitePieces[j]);
+                                    if (gameState.whitePieces[j] === 'king') {
+                                        gameState.winner = 'black';
+                                        gameState.gameOver = true;
+                                    }
+                                    gameState.whitePieces.splice(j, 1);
+                                    gameState.whiteLocations.splice(j, 1);
+                                    break;
                                 }
-                                gameState.whitePieces.splice(j, 1);
-                                gameState.whiteLocations.splice(j, 1);
                             }
                         }
-                        // Advance turn: 2->0, 3->0
+                        
+                        // Check for pawn promotion
+                        if (pieceType === 'pawn' && toRow === 0) {
+                            pendingPromotion = { pieceIndex: i, color: 'black', location: [toCol, toRow] };
+                            showPromotionMenu('black');
+                            return;
+                        }
+                        
+                        // Update en passant target
+                        if (pieceType === 'pawn' && Math.abs(fromRow - toRow) === 2) {
+                            gameState.blackEp = [toCol, toRow + 1];
+                        } else {
+                            gameState.blackEp = [100, 100];
+                        }
+                        gameState.whiteEp = [100, 100];
+                        
                         gameState.turnStep = 0;
                         updateBoardDisplay();
                         updateCapturedPieces();
@@ -706,6 +954,48 @@
             }
         }
         
+        function showPromotionMenu(color) {
+            const overlay = document.getElementById('promotionOverlay');
+            const menu = document.getElementById('promotionMenu');
+            menu.innerHTML = '';
+            
+            promotionPieces.forEach(pieceType => {
+                const pieceDiv = document.createElement('div');
+                pieceDiv.className = 'promotion-piece';
+                pieceDiv.textContent = promotionSymbols[color][pieceType];
+                pieceDiv.onclick = () => promotePawn(pieceType);
+                menu.appendChild(pieceDiv);
+            });
+            
+            overlay.classList.remove('hidden');
+        }
+        
+        function promotePawn(pieceType) {
+            if (!pendingPromotion) return;
+            
+            const { pieceIndex, color } = pendingPromotion;
+            
+            if (color === 'white') {
+                gameState.whitePieces[pieceIndex] = pieceType;
+            } else {
+                gameState.blackPieces[pieceIndex] = pieceType;
+            }
+            
+            pendingPromotion = null;
+            document.getElementById('promotionOverlay').classList.add('hidden');
+            
+            if (currentMode === 'online' && roomCode) {
+                socket.emit('promote_pawn', {
+                    room_code: roomCode,
+                    piece_type: pieceType,
+                    game_state: gameState
+                });
+            }
+            
+            updateBoardDisplay();
+            updateStatus();
+        }
+        
         function clearSelection() {
             selectedSquare = null;
             validMoves = [];
@@ -713,22 +1003,16 @@
         }
         
         function updateBoardDisplay() {
-            // Ensure board is initialized
             if (!board || board.length === 0) {
                 initBoard();
             }
             
             for (let row = 0; row < 8; row++) {
                 for (let col = 0; col < 8; col++) {
-                    if (!board[row] || !board[row][col]) {
-                        console.error(`Missing square at row ${row}, col ${col}`);
-                        continue;
-                    }
+                    if (!board[row] || !board[row][col]) continue;
                     const square = board[row][col];
                     square.innerHTML = '';
-                    // Remove selection and valid move classes but keep checkerboard pattern
                     square.classList.remove('selected', 'valid-move', 'blue-move');
-                    // Reapply checkerboard pattern
                     const isLight = (row + col) % 2 === 0;
                     square.className = `square ${isLight ? 'light' : 'dark'}`;
                 }
@@ -753,9 +1037,6 @@
                     });
                 }
             }
-            
-            // Update turn indicator
-            updateStatus();
         }
         
         function drawPieces(color) {
@@ -765,16 +1046,17 @@
             for (let i = 0; i < pieces.length; i++) {
                 const piece = pieces[i];
                 const loc = locations[i];
+                if (!loc || loc.length < 2) continue;
                 const row = loc[1];
                 const col = loc[0];
                 
+                if (!board[row] || !board[row][col]) continue;
                 const square = board[row][col];
                 const img = document.createElement('img');
                 img.src = pieceImages[color][piece];
                 img.alt = `${color} ${piece}`;
                 img.className = `piece-img ${piece === 'pawn' ? 'pawn' : ''}`;
                 img.onerror = function() {
-                    // Fallback to Unicode if image fails to load
                     const symbols = {
                         'white': {'pawn': '♙', 'rook': '♖', 'knight': '♘', 'bishop': '♗', 'queen': '♕', 'king': '♔'},
                         'black': {'pawn': '♟', 'rook': '♜', 'knight': '♞', 'bishop': '♝', 'queen': '♛', 'king': '♚'}
@@ -830,7 +1112,9 @@
                 capturedPiecesBlack: [],
                 turnStep: 0,
                 gameOver: false,
-                winner: ''
+                winner: '',
+                whiteEp: [100, 100],
+                blackEp: [100, 100]
             };
             updateCapturedPieces();
         }
@@ -839,7 +1123,6 @@
             const statusEl = document.getElementById('statusMessage');
             const turnIndicator = document.getElementById('turnIndicator');
             
-            // Extract turn information and update indicator
             if (gameState.gameOver) {
                 turnIndicator.textContent = gameState.winner.toUpperCase();
                 turnIndicator.className = 'turn-indicator ' + (gameState.winner === 'white' ? 'white-turn' : 'black-turn');
@@ -849,7 +1132,6 @@
                 turnIndicator.textContent = isWhiteTurn ? 'WHITE' : 'BLACK';
                 turnIndicator.className = 'turn-indicator ' + (isWhiteTurn ? 'white-turn' : 'black-turn');
                 
-                // Update message
                 if (message) {
                     statusEl.textContent = message;
                 } else {
@@ -905,7 +1187,6 @@
         
         socket.on('opponent_move', (data) => {
             if (data.game_state) {
-                // Update from server game state - handle both camelCase and snake_case
                 const gs = data.game_state;
                 gameState.whitePieces = gs.whitePieces || gs.white_pieces || gameState.whitePieces;
                 gameState.whiteLocations = (gs.whiteLocations || gs.white_locations || gameState.whiteLocations).map(loc => Array.isArray(loc) ? loc : [loc[0], loc[1]]);
@@ -916,10 +1197,12 @@
                 gameState.turnStep = gs.turnStep !== undefined ? gs.turnStep : (gs.turn_step !== undefined ? gs.turn_step : gameState.turnStep);
                 gameState.gameOver = gs.gameOver !== undefined ? gs.gameOver : (gs.game_over !== undefined ? gs.game_over : gameState.gameOver);
                 gameState.winner = gs.winner || gameState.winner;
+                gameState.whiteEp = gs.whiteEp || gs.white_ep || gameState.whiteEp || [100, 100];
+                gameState.blackEp = gs.blackEp || gs.black_ep || gameState.blackEp || [100, 100];
                 updateBoardDisplay();
                 updateCapturedPieces();
             } else if (data.from_pos && data.to_pos) {
-                updateLocalMove(data.from_pos, data.to_pos);
+                updateLocalMove(data.from_pos, data.to_pos, data.is_en_passant || false);
             }
             updateStatus();
         });
@@ -936,6 +1219,8 @@
                 gameState.turnStep = gs.turnStep !== undefined ? gs.turnStep : (gs.turn_step !== undefined ? gs.turn_step : gameState.turnStep);
                 gameState.gameOver = gs.gameOver !== undefined ? gs.gameOver : (gs.game_over !== undefined ? gs.game_over : gameState.gameOver);
                 gameState.winner = gs.winner || gameState.winner;
+                gameState.whiteEp = gs.whiteEp || gs.white_ep || gameState.whiteEp || [100, 100];
+                gameState.blackEp = gs.blackEp || gs.black_ep || gameState.blackEp || [100, 100];
                 updateBoardDisplay();
                 updateCapturedPieces();
             }
@@ -957,9 +1242,19 @@
             alert(`You forfeited. ${data.winner.toUpperCase()} wins!`);
         });
         
+        socket.on('pawn_promoted', (data) => {
+            if (data.game_state) {
+                const gs = data.game_state;
+                gameState.whitePieces = gs.whitePieces || gs.white_pieces || gameState.whitePieces;
+                gameState.blackPieces = gs.blackPieces || gs.black_pieces || gameState.blackPieces;
+                gameState.whiteLocations = (gs.whiteLocations || gs.white_locations || gameState.whiteLocations).map(loc => Array.isArray(loc) ? loc : [loc[0], loc[1]]);
+                gameState.blackLocations = (gs.blackLocations || gs.black_locations || gameState.blackLocations).map(loc => Array.isArray(loc) ? loc : [loc[0], loc[1]]);
+                updateBoardDisplay();
+            }
+        });
+        
         // Keyboard event handlers
         document.addEventListener('keydown', function(event) {
-            // Escape key to go back to menu
             if (event.key === 'Escape' || event.key === 'Esc') {
                 const gameScreen = document.getElementById('gameScreen');
                 if (!gameScreen.classList.contains('hidden')) {

@@ -154,6 +154,7 @@ def handle_move(data):
     room_code = data.get('room_code')
     from_pos = tuple(data.get('from_pos'))
     to_pos = tuple(data.get('to_pos'))
+    is_en_passant = data.get('is_en_passant', False)
     
     if room_code not in rooms:
         emit('error', {'message': 'Room does not exist'})
@@ -175,6 +176,29 @@ def handle_move(data):
             emit('opponent_move', {
                 'from_pos': from_pos,
                 'to_pos': to_pos,
+                'is_en_passant': is_en_passant,
+                'game_state': room.get('game_state')
+            }, room=player_id)
+
+@socketio.on('promote_pawn')
+def handle_promotion(data):
+    """Handle pawn promotion"""
+    room_code = data.get('room_code')
+    piece_type = data.get('piece_type')
+    
+    if room_code not in rooms:
+        return
+    
+    room = rooms[room_code]
+    
+    if 'game_state' in data:
+        room['game_state'] = data['game_state']
+    
+    # Broadcast promotion to other player
+    for player_id in room['players']:
+        if player_id != request.sid:
+            emit('pawn_promoted', {
+                'piece_type': piece_type,
                 'game_state': room.get('game_state')
             }, room=player_id)
 
