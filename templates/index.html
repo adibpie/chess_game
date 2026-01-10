@@ -654,30 +654,42 @@
             
             const piece = getPieceAt(row, col);
             
-            if (currentMode === 'local') {
-                if (piece) {
-                    const pieceIsWhite = piece.color === 'white';
-                    if (pieceIsWhite !== isWhiteTurn) {
-                        alert(`It's ${isWhiteTurn ? 'White' : 'Black'}'s turn!`);
-                        return;
-                    }
-                }
-            }
-            
-            const isMyPiece = currentMode === 'local' || 
-                             (piece && ((playerColor === 'white' && piece.color === 'white') ||
-                                       (playerColor === 'black' && piece.color === 'black')));
-            
+            // If a piece is already selected and this is a valid move, execute the move
             if (selectedSquare && validMoves.some(m => m[0] === row && m[1] === col)) {
                 const [fromRow, fromCol] = selectedSquare;
                 makeMove(fromRow, fromCol, row, col);
                 clearSelection();
-            } else if (isMyPiece && piece && ((currentMode === 'local') || 
-                     (currentMode === 'online' && piece.color === playerColor))) {
+                return;
+            }
+            
+            // If clicking on a piece, check if it's the correct turn
+            if (piece) {
+                const pieceIsWhite = piece.color === 'white';
+                
+                // In local mode, check if piece matches current turn
+                if (currentMode === 'local') {
+                    if (pieceIsWhite !== isWhiteTurn) {
+                        // Don't show alert if clicking on opponent piece when trying to capture
+                        // Just clear selection
+                        clearSelection();
+                        return;
+                    }
+                } else {
+                    // In online mode, check if piece belongs to player
+                    const isMyPiece = (playerColor === 'white' && piece.color === 'white') ||
+                                     (playerColor === 'black' && piece.color === 'black');
+                    if (!isMyPiece) {
+                        clearSelection();
+                        return;
+                    }
+                }
+                
+                // Select this piece
                 selectedSquare = [row, col];
                 updateValidMoves(row, col);
                 updateBoardDisplay();
             } else {
+                // Clicked on empty square, clear selection
                 clearSelection();
             }
         }
@@ -983,16 +995,28 @@
         function promotePawn(pieceType) {
             if (!pendingPromotion) return;
             
+            const overlay = document.getElementById('promotionOverlay');
+            if (overlay) {
+                overlay.classList.add('hidden');
+            }
+            
             const { pieceIndex, color } = pendingPromotion;
             
             if (color === 'white') {
                 gameState.whitePieces[pieceIndex] = pieceType;
+                // Advance turn after promotion (white -> black)
+                gameState.turnStep = 2;
             } else {
                 gameState.blackPieces[pieceIndex] = pieceType;
+                // Advance turn after promotion (black -> white)
+                gameState.turnStep = 0;
             }
             
+            // Reset en passant targets
+            gameState.whiteEp = [100, 100];
+            gameState.blackEp = [100, 100];
+            
             pendingPromotion = null;
-            document.getElementById('promotionOverlay').classList.add('hidden');
             
             if (currentMode === 'online' && roomCode) {
                 socket.emit('promote_pawn', {
@@ -1003,6 +1027,7 @@
             }
             
             updateBoardDisplay();
+            updateCapturedPieces();
             updateStatus();
         }
         
