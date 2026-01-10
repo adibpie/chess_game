@@ -5,11 +5,8 @@ from constants import *
 class Menu:
     def __init__(self):
         self.selected_mode = None
-        self.ai_type = None
-        self.ai_difficulty = 3
         self.room_code = ""
         self.entering_room_code = False
-        self.showing_ai_selection = False
         
     def draw_pixel_text(self, text, font, color, pos, pixel_size=2):
         """Draw pixelated text effect"""
@@ -83,22 +80,15 @@ class Menu:
         button_spacing = 110
         
         # Local PvP button
-        pvp_y = 280
+        pvp_y = 350
         pvp_rect = pygame.Rect(button_x, pvp_y, button_width, button_height)
         mouse_pos = pygame.mouse.get_pos()
         pvp_hover = pvp_rect.collidepoint(mouse_pos)
         self.draw_pixel_button(pvp_rect, 'LOCAL PVP', medium_font, 
                               (100, 150, 255), (150, 200, 255), pvp_hover)
         
-        # Play vs AI button
-        ai_y = pvp_y + button_spacing
-        ai_rect = pygame.Rect(button_x, ai_y, button_width, button_height)
-        ai_hover = ai_rect.collidepoint(mouse_pos)
-        self.draw_pixel_button(ai_rect, 'PLAY VS AI', medium_font,
-                              (100, 255, 100), (150, 255, 150), ai_hover)
-        
         # Online Multiplayer button
-        online_y = ai_y + button_spacing
+        online_y = pvp_y + button_spacing
         online_rect = pygame.Rect(button_x, online_y, button_width, button_height)
         online_hover = online_rect.collidepoint(mouse_pos)
         self.draw_pixel_button(online_rect, 'ONLINE MULTIPLAYER', medium_font,
@@ -108,65 +98,8 @@ class Menu:
         border_color = (255, 255, 0)
         pygame.draw.rect(screen, border_color, (0, 0, WIDTH, HEIGHT), 5)
         
-        return {'pvp': pvp_rect, 'ai': ai_rect, 'online': online_rect}
+        return {'pvp': pvp_rect, 'online': online_rect}
     
-    def draw_ai_selection(self):
-        # Retro background
-        screen.fill((20, 20, 40))
-        grid_color = (30, 30, 50)
-        for x in range(0, WIDTH, 20):
-            pygame.draw.line(screen, grid_color, (x, 0), (x, HEIGHT), 1)
-        for y in range(0, HEIGHT, 20):
-            pygame.draw.line(screen, grid_color, (0, y), (WIDTH, y), 1)
-        
-        # Title
-        title_surf = self.draw_pixel_text('SELECT AI OPPONENT', big_font, (255, 255, 0), (0, 0), pixel_size=4)
-        title_rect = title_surf.get_rect(center=(WIDTH // 2, 150))
-        screen.blit(title_surf, title_rect)
-        
-        button_width = 450
-        button_height = 90
-        button_x = (WIDTH - button_width) // 2
-        button_spacing = 110
-        
-        mouse_pos = pygame.mouse.get_pos()
-        
-        # Minimax AI button
-        minimax_y = 300
-        minimax_rect = pygame.Rect(button_x, minimax_y, button_width, button_height)
-        minimax_hover = minimax_rect.collidepoint(mouse_pos)
-        self.draw_pixel_button(minimax_rect, 'MINIMAX AI', medium_font,
-                              (100, 150, 255), (150, 200, 255), minimax_hover)
-        
-        # Stockfish AI button
-        stockfish_y = minimax_y + button_spacing
-        stockfish_rect = pygame.Rect(button_x, stockfish_y, button_width, button_height)
-        stockfish_hover = stockfish_rect.collidepoint(mouse_pos)
-        self.draw_pixel_button(stockfish_rect, 'STOCKFISH AI', medium_font,
-                              (100, 255, 100), (150, 255, 150), stockfish_hover)
-        
-        # Back button
-        back_y = stockfish_y + button_spacing
-        back_rect = pygame.Rect(button_x, back_y, button_width, button_height)
-        back_hover = back_rect.collidepoint(mouse_pos)
-        self.draw_pixel_button(back_rect, 'BACK', medium_font,
-                              (150, 150, 150), (200, 200, 200), back_hover)
-        
-        # Difficulty selector for Minimax
-        if self.ai_type == 'minimax':
-            diff_text = f'DIFFICULTY (DEPTH): {self.ai_difficulty}'
-            diff_surf = self.draw_pixel_text(diff_text, font, (255, 255, 255), (0, 0), pixel_size=2)
-            diff_rect = diff_surf.get_rect(center=(WIDTH // 2, back_y + button_height + 40))
-            screen.blit(diff_surf, diff_rect)
-            
-            left_arrow = self.draw_pixel_text('<', font, (255, 255, 0), (0, 0), pixel_size=3)
-            right_arrow = self.draw_pixel_text('>', font, (255, 255, 0), (0, 0), pixel_size=3)
-            screen.blit(left_arrow, (button_x - 50, back_y + button_height + 30))
-            screen.blit(right_arrow, (button_x + button_width + 20, back_y + button_height + 30))
-        
-        pygame.draw.rect(screen, (255, 255, 0), (0, 0, WIDTH, HEIGHT), 5)
-        
-        return {'minimax': minimax_rect, 'stockfish': stockfish_rect, 'back': back_rect}
     
     def draw_online_menu(self):
         # Retro background
@@ -229,8 +162,5 @@ class Menu:
     
     def reset(self):
         self.selected_mode = None
-        self.ai_type = None
-        self.ai_difficulty = 3
         self.room_code = ""
         self.entering_room_code = False
-        self.showing_ai_selection = False

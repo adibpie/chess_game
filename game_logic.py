@@ -43,7 +43,6 @@ class GameState:
         self.white_options = []
         self.black_options = []
         self.selected_piece = None
-        self.ai_thinking = False
         self._update_options()
     
     def _update_options(self):

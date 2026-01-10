@@ -89,12 +89,7 @@ castling_moves = []
 
 # Game mode constants
 GAME_MODE_LOCAL = 'local'
-GAME_MODE_AI = 'ai'
 GAME_MODE_ONLINE = 'online'
-
-# AI types
-AI_MINIMAX = 'minimax'
-AI_STOCKFISH = 'stockfish'
 
 # Server configuration (default to localhost for development)
 SERVER_URL = 'https://chess-gg.up.railway.app'

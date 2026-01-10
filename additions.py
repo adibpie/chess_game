@@ -17,7 +17,6 @@ pygame.init()
 game_state = GameState()
 menu = Menu()
 current_mode = None
-ai_opponent = None
 online_client = None
 
 # Set move functions in game_logic to avoid circular imports
@@ -106,14 +105,10 @@ def draw_board():
     # Draw sidebar for captured pieces
     pygame.draw.rect(screen, 'gold', [800, 0, 200, HEIGHT], 5)
     
-    # Show AI thinking status
-    if current_mode == GAME_MODE_AI and hasattr(game_state, 'ai_thinking') and game_state.ai_thinking:
-        status_text = 'Black is deciding the move...'
-        screen.blit(big_font.render(status_text, True, 'black'), (20, 820))
-    else:
-        status_text = ['White: Select a Piece to Move!', 'White: Select a Destination!',
-                       'Black: Select a Piece to Move!', 'Black: Select a Destination!']
-        screen.blit(big_font.render(status_text[turn_step], True, 'black'), (20, 820))
+    # Status text
+    status_text = ['White: Select a Piece to Move!', 'White: Select a Destination!',
+                   'Black: Select a Piece to Move!', 'Black: Select a Destination!']
+    screen.blit(big_font.render(status_text[turn_step], True, 'black'), (20, 820))
     
     # Draw grid lines
     for i in range(9):
@@ -576,11 +571,6 @@ def check_promo_select():
 def reset_game():
     """Reset the game to initial state"""
     game_state.reset_game()
-    # Clear AI thinking state
-    if hasattr(game_state, 'ai_thinking'):
-        game_state.ai_thinking = False
-    if hasattr(game_state, 'ai_think_start_time'):
-        delattr(game_state, 'ai_think_start_time')
     # Update options after reset
     sync_globals()
     # Re-sync after options are updated
@@ -622,8 +612,6 @@ while run:
                     current_mode = GAME_MODE_LOCAL
                     in_menu = False
                     reset_game()
-                elif clicked == 'ai':
-                    menu.showing_ai_selection = True
                 elif clicked == 'online':
                     menu.entering_room_code = True
                 elif clicked == 'create':
@@ -643,42 +631,9 @@ while run:
                             if online_client.join_room(menu.room_code.upper()):
                                 in_menu = False
                                 reset_game()
-                elif clicked == 'minimax':
-                    current_mode = GAME_MODE_AI
-                    menu.ai_type = AI_MINIMAX
-                    in_menu = False
-                    reset_game()
-                    # Import AI engine here to avoid circular imports
-                    from ai_engine import MinimaxAI
-                    # Increase depth for better play (depth 3-5 becomes 4-6)
-                    ai_depth = menu.ai_difficulty + 1
-                    ai_opponent = MinimaxAI(ai_depth)
-                    # Initialize AI thinking state
-                    game_state.ai_thinking = False
-                elif clicked == 'stockfish':
-                    current_mode = GAME_MODE_AI
-                    menu.ai_type = AI_STOCKFISH
-                    in_menu = False
-                    reset_game()
-                    from ai_engine import StockfishAI
-                    ai_opponent = StockfishAI()
-                    # Initialize AI thinking state
-                    game_state.ai_thinking = False
                 elif clicked == 'back':
-                    menu.showing_ai_selection = False
                     menu.entering_room_code = False
                     menu.room_code = ""
-                elif clicked == 'create':
-                    # Will be handled in online_client
-                    pass
-                elif clicked == 'join':
-                    # Will be handled in online_client
-                    pass
-            if event.type == pygame.KEYDOWN and menu.showing_ai_selection:
-                if event.key == pygame.K_LEFT and menu.ai_type == 'minimax':
-                    menu.ai_difficulty = max(1, menu.ai_difficulty - 1)
-                elif event.key == pygame.K_RIGHT and menu.ai_type == 'minimax':
-                    menu.ai_difficulty = min(5, menu.ai_difficulty + 1)
     else:
         # Game is running
         sync_globals()
@@ -699,33 +654,6 @@ while run:
             if selected_piece == 'king':
                 draw_castling(castling_moves)
         
-        # Handle AI moves
-        if current_mode == GAME_MODE_AI and not game_over and turn_step >= 2 and ai_opponent:
-            # AI's turn (black) - show thinking status
-            if not hasattr(game_state, 'ai_thinking') or not game_state.ai_thinking:
-                game_state.ai_thinking = True
-                game_state.ai_think_start_time = pygame.time.get_ticks()
-            
-            # Wait 2 seconds before making move
-            if hasattr(game_state, 'ai_think_start_time'):
-                elapsed = pygame.time.get_ticks() - game_state.ai_think_start_time
-                if elapsed >= 2000:  # 2 seconds
-                    move = ai_opponent.get_move(game_state)
-                    if move:
-                        from_pos, to_pos = move
-                        success = game_state.make_move(from_pos, to_pos)
-                        if success:
-                            sync_globals()
-                            # Reset AI thinking state for next turn
-                            game_state.ai_thinking = False
-                            if hasattr(game_state, 'ai_think_start_time'):
-                                delattr(game_state, 'ai_think_start_time')
-                    else:
-                        # If no move found, reset thinking state
-                        game_state.ai_thinking = False
-                        if hasattr(game_state, 'ai_think_start_time'):
-                            delattr(game_state, 'ai_think_start_time')
-        
         # Handle online moves (WebSocket handles messages asynchronously)
         if current_mode == GAME_MODE_ONLINE and online_client:
             online_client.process_messages()
@@ -744,7 +672,6 @@ while run:
                     in_menu = True
                     menu.reset()
                     current_mode = None
-                    ai_opponent = None
                     online_client = None
                 if event.key == pygame.K_RETURN and game_over:
                     reset_game()
@@ -757,10 +684,6 @@ while run:
                 x_coord = event.pos[0] // 100
                 y_coord = event.pos[1] // 100
                 click_coords = (x_coord, y_coord)
-                
-                # Skip if it's AI's turn
-                if current_mode == GAME_MODE_AI and turn_step >= 2:
-                    continue
                 
                 # Skip if it's online opponent's turn
                 if current_mode == GAME_MODE_ONLINE and online_client and not online_client.is_my_turn():
