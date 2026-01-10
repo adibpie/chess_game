@@ -1,8 +1,9 @@
 # Online multiplayer server for chess game
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, send_from_directory
 from flask_socketio import SocketIO, emit, join_room, leave_room
 import random
 import string
+import os
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
@@ -28,6 +29,11 @@ def index():
 def play_room(room_code):
     """Serve the game interface for a specific room"""
     return render_template('index.html', room_code=room_code)
+
+@app.route('/assets/images/<path:filename>')
+def serve_images(filename):
+    """Serve chess piece images"""
+    return send_from_directory(os.path.join(os.path.dirname(__file__), 'assets', 'images'), filename)
 
 @app.route('/api/create_room', methods=['POST'])
 def create_room():
