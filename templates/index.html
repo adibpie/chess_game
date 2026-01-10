@@ -297,6 +297,78 @@
             border-color: blue;
         }
         
+        /* Check indicator */
+        .square.in-check {
+            border: 5px solid darkred !important;
+            animation: checkFlash 0.5s infinite;
+        }
+        
+        .square.in-check.black-king {
+            border-color: darkblue !important;
+        }
+        
+        @keyframes checkFlash {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        /* Game Over Modal */
+        .game-over-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+            pointer-events: auto;
+        }
+        
+        .game-over-modal:not(.hidden) {
+            display: flex;
+        }
+        
+        .game-over-content {
+            background: black;
+            border: 5px solid gold;
+            padding: 40px;
+            text-align: center;
+            border-radius: 10px;
+            color: white;
+            max-width: 500px;
+            width: 90%;
+        }
+        
+        .game-over-title {
+            font-size: 48px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: gold;
+        }
+        
+        .game-over-message {
+            font-size: 32px;
+            margin-bottom: 30px;
+        }
+        
+        .game-over-button {
+            background: lightblue;
+            color: black;
+            border: 3px solid black;
+            padding: 15px 30px;
+            font-size: 24px;
+            cursor: pointer;
+            font-weight: bold;
+            border-radius: 5px;
+        }
+        
+        .game-over-button:hover {
+            background: lightcyan;
+        }
+        
         /* Mobile Responsive */
         @media (max-width: 1024px) {
             .game-container {
@@ -464,6 +536,15 @@
         <div class="promotion-menu" id="promotionMenu"></div>
     </div>
     
+    <!-- Game Over Modal -->
+    <div id="gameOverModal" class="game-over-modal hidden">
+        <div class="game-over-content">
+            <div class="game-over-title">GAME OVER</div>
+            <div class="game-over-message" id="gameOverMessage"></div>
+            <button class="game-over-button" onclick="restartGame()">NEW GAME</button>
+        </div>
+    </div>
+    
     <script>
         const socket = io(window.location.origin, {
             transports: ['websocket', 'polling']
@@ -475,6 +556,7 @@
         let selectedSquare = null;
         let validMoves = [];
         let pendingPromotion = null; // {pieceIndex, color, location}
+        let checkFlashCounter = 0; // Counter for flashing check indicator
         let gameState = {
             whitePieces: [],
             whiteLocations: [],
@@ -486,7 +568,9 @@
             gameOver: false,
             winner: '',
             whiteEp: [100, 100],
-            blackEp: [100, 100]
+            blackEp: [100, 100],
+            inCheck: false,
+            checkedKing: null // {color: 'white' or 'black', location: [col, row]}
         };
         let currentMode = null;
         
@@ -921,8 +1005,8 @@
                         gameState.blackEp = [100, 100];
                         
                         gameState.turnStep = 2;
-                        updateBoardDisplay();
                         updateCapturedPieces();
+                        updateBoardDisplay();
                         updateStatus();
                         return;
                     }
@@ -967,8 +1051,8 @@
                         gameState.whiteEp = [100, 100];
                         
                         gameState.turnStep = 0;
-                        updateBoardDisplay();
                         updateCapturedPieces();
+                        updateBoardDisplay();
                         updateStatus();
                         return;
                     }
@@ -1031,6 +1115,114 @@
             updateStatus();
         }
         
+        function checkForCheck() {
+            gameState.inCheck = false;
+            gameState.checkedKing = null;
+            
+            // Check if white king is in check
+            const whiteKingIndex = gameState.whitePieces.indexOf('king');
+            if (whiteKingIndex !== -1) {
+                const whiteKingLoc = gameState.whiteLocations[whiteKingIndex];
+                // Get all black piece moves
+                const blackMoves = getAllValidMoves('black');
+                if (blackMoves.some(move => move[0] === whiteKingLoc[0] && move[1] === whiteKingLoc[1])) {
+                    gameState.inCheck = true;
+                    gameState.checkedKing = { color: 'white', location: whiteKingLoc };
+                }
+            }
+            
+            // Check if black king is in check
+            const blackKingIndex = gameState.blackPieces.indexOf('king');
+            if (blackKingIndex !== -1) {
+                const blackKingLoc = gameState.blackLocations[blackKingIndex];
+                // Get all white piece moves
+                const whiteMoves = getAllValidMoves('white');
+                if (whiteMoves.some(move => move[0] === blackKingLoc[0] && move[1] === blackKingLoc[1])) {
+                    gameState.inCheck = true;
+                    gameState.checkedKing = { color: 'black', location: blackKingLoc };
+                }
+            }
+        }
+        
+        function getAllValidMoves(color) {
+            const allMoves = [];
+            const pieces = color === 'white' ? gameState.whitePieces : gameState.blackPieces;
+            const locations = color === 'white' ? gameState.whiteLocations : gameState.blackLocations;
+            
+            for (let i = 0; i < pieces.length; i++) {
+                const loc = locations[i];
+                if (!loc || loc.length < 2) continue;
+                const row = loc[1];
+                const col = loc[0];
+                
+                // Temporarily set selectedSquare to get valid moves for this piece
+                const tempSelected = selectedSquare;
+                selectedSquare = [row, col];
+                updateValidMoves(row, col);
+                
+                validMoves.forEach(move => {
+                    allMoves.push([move[1], move[0]]); // Convert [row, col] to [col, row]
+                });
+                
+                selectedSquare = tempSelected;
+            }
+            
+            return allMoves;
+        }
+        
+        function checkForCheckmate() {
+            if (!gameState.inCheck || !gameState.checkedKing) return false;
+            
+            const checkedColor = gameState.checkedKing.color;
+            const pieces = checkedColor === 'white' ? gameState.whitePieces : gameState.blackPieces;
+            const locations = checkedColor === 'white' ? gameState.whiteLocations : gameState.blackLocations;
+            
+            // Check if any piece can make a move
+            for (let i = 0; i < pieces.length; i++) {
+                const loc = locations[i];
+                if (!loc || loc.length < 2) continue;
+                const row = loc[1];
+                const col = loc[0];
+                
+                const tempSelected = selectedSquare;
+                selectedSquare = [row, col];
+                updateValidMoves(row, col);
+                
+                // If there are any valid moves, not checkmate (simplified check)
+                if (validMoves.length > 0) {
+                    selectedSquare = tempSelected;
+                    return false; // Has moves available
+                }
+                
+                selectedSquare = tempSelected;
+            }
+            
+            // No moves available = checkmate
+            return true;
+        }
+        
+        function showGameOver(winner) {
+            gameState.gameOver = true;
+            gameState.winner = winner;
+            const modal = document.getElementById('gameOverModal');
+            const message = document.getElementById('gameOverMessage');
+            if (modal && message) {
+                message.textContent = `${winner.toUpperCase()} WINS BY CHECKMATE!`;
+                modal.classList.remove('hidden');
+            }
+            updateStatus();
+        }
+        
+        function restartGame() {
+            const modal = document.getElementById('gameOverModal');
+            if (modal) {
+                modal.classList.add('hidden');
+            }
+            initializeGameState();
+            updateBoardDisplay();
+            updateStatus();
+        }
+        
         function clearSelection() {
             selectedSquare = null;
             validMoves = [];
@@ -1042,12 +1234,25 @@
                 initBoard();
             }
             
+            // Increment check flash counter
+            checkFlashCounter = (checkFlashCounter + 1) % 30;
+            
+            // Check for check and checkmate
+            checkForCheck();
+            if (gameState.inCheck && !gameState.gameOver) {
+                const isCheckmate = checkForCheckmate();
+                if (isCheckmate) {
+                    const winner = gameState.checkedKing.color === 'white' ? 'black' : 'white';
+                    showGameOver(winner);
+                }
+            }
+            
             for (let row = 0; row < 8; row++) {
                 for (let col = 0; col < 8; col++) {
                     if (!board[row] || !board[row][col]) continue;
                     const square = board[row][col];
                     square.innerHTML = '';
-                    square.classList.remove('selected', 'valid-move', 'blue-move');
+                    square.classList.remove('selected', 'valid-move', 'blue-move', 'in-check', 'black-king');
                     const isLight = (row + col) % 2 === 0;
                     square.className = `square ${isLight ? 'light' : 'dark'}`;
                 }
@@ -1055,6 +1260,19 @@
             
             drawPieces('white');
             drawPieces('black');
+            
+            // Draw check indicator (flashing)
+            if (gameState.checkedKing && checkFlashCounter < 15 && !gameState.gameOver) {
+                const kingLoc = gameState.checkedKing.location;
+                const kingRow = kingLoc[1];
+                const kingCol = kingLoc[0];
+                if (board[kingRow] && board[kingRow][kingCol]) {
+                    board[kingRow][kingCol].classList.add('in-check');
+                    if (gameState.checkedKing.color === 'black') {
+                        board[kingRow][kingCol].classList.add('black-king');
+                    }
+                }
+            }
             
             if (selectedSquare) {
                 const [row, col] = selectedSquare;
@@ -1149,8 +1367,11 @@
                 gameOver: false,
                 winner: '',
                 whiteEp: [100, 100],
-                blackEp: [100, 100]
+                blackEp: [100, 100],
+                inCheck: false,
+                checkedKing: null
             };
+            checkFlashCounter = 0;
             updateCapturedPieces();
         }
         
