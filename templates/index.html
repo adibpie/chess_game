@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chess Game - Online</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            max-width: 1200px;
+            width: 100%;
+        }
+        
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        
+        .menu-screen {
+            text-align: center;
+        }
+        
+        .menu-button {
+            display: block;
+            width: 100%;
+            max-width: 400px;
+            margin: 15px auto;
+            padding: 15px 30px;
+            font-size: 18px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .menu-button:hover {
+            background: #5568d3;
+        }
+        
+        .room-input {
+            width: 100%;
+            max-width: 400px;
+            padding: 10px;
+            margin: 10px auto;
+            display: block;
+            font-size: 16px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+        }
+        
+        .game-board {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 0;
+            width: 640px;
+            height: 640px;
+            margin: 20px auto;
+            border: 3px solid #333;
+        }
+        
+        .square {
+            width: 80px;
+            height: 80px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            cursor: pointer;
+        }
+        
+        .square.light {
+            background: #f0d9b5;
+        }
+        
+        .square.dark {
+            background: #b58863;
+        }
+        
+        .square.selected {
+            background: #ff6b6b !important;
+        }
+        
+        .square.valid-move {
+            background: #51cf66 !important;
+        }
+        
+        .piece {
+            font-size: 60px;
+            cursor: pointer;
+            user-select: none;
+        }
+        
+        .game-info {
+            text-align: center;
+            margin: 20px 0;
+            font-size: 18px;
+        }
+        
+        .status-message {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            background: #e3f2fd;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        .room-code-display {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        
+        .room-code-display code {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>♟️ Chess Game Online</h1>
+        
+        <!-- Menu Screen -->
+        <div id="menuScreen" class="menu-screen">
+            <button class="menu-button" onclick="createRoom()">Create Room</button>
+            <button class="menu-button" onclick="showJoinRoom()">Join Room</button>
+            <div id="joinRoomDiv" class="hidden">
+                <input type="text" id="roomCodeInput" class="room-input" placeholder="Enter Room Code" maxlength="6">
+                <button class="menu-button" onclick="joinRoom()">Join</button>
+            </div>
+        </div>
+        
+        <!-- Game Screen -->
+        <div id="gameScreen" class="hidden">
+            <div class="room-code-display">
+                Room Code: <code id="roomCodeDisplay"></code>
+            </div>
+            <div class="game-info">
+                <div id="statusMessage" class="status-message">Waiting for opponent...</div>
+                <div id="turnIndicator"></div>
+            </div>
+            <div id="gameBoard" class="game-board"></div>
+        </div>
+    </div>
+    
+    <script>
+        const socket = io();
+        let roomCode = null;
+        let playerColor = null;
+        let board = [];
+        let selectedSquare = null;
+        let validMoves = [];
+        let gameState = {
+            whitePieces: [],
+            whiteLocations: [],
+            blackPieces: [],
+            blackLocations: [],
+            turnStep: 0
+        };
+        
+        const pieceSymbols = {
+            'white': {
+                'pawn': '♙', 'rook': '♖', 'knight': '♘',
+                'bishop': '♗', 'queen': '♕', 'king': '♔'
+            },
+            'black': {
+                'pawn': '♟', 'rook': '♜', 'knight': '♞',
+                'bishop': '♝', 'queen': '♛', 'king': '♚'
+            }
+        };
+        
+        // Initialize board
+        function initBoard() {
+            const boardDiv = document.getElementById('gameBoard');
+            boardDiv.innerHTML = '';
+            board = [];
+            
+            for (let row = 0; row < 8; row++) {
+                board[row] = [];
+                for (let col = 0; col < 8; col++) {
+                    const square = document.createElement('div');
+                    square.className = `square ${(row + col) % 2 === 0 ? 'light' : 'dark'}`;
+                    square.dataset.row = row;
+                    square.dataset.col = col;
+                    square.onclick = () => handleSquareClick(row, col);
+                    boardDiv.appendChild(square);
+                    board[row][col] = square;
+                }
+            }
+        }
+        
+        function createRoom() {
+            socket.emit('create_room');
+        }
+        
+        function showJoinRoom() {
+            document.getElementById('joinRoomDiv').classList.remove('hidden');
+        }
+        
+        function joinRoom() {
+            const code = document.getElementById('roomCodeInput').value.toUpperCase();
+            if (code.length === 6) {
+                socket.emit('join_room', { room_code: code });
+            } else {
+                alert('Please enter a valid 6-character room code');
+            }
+        }
+        
+        function handleSquareClick(row, col) {
+            if (!playerColor) return;
+            
+            const isMyTurn = (playerColor === 'white' && gameState.turnStep < 2) ||
+                            (playerColor === 'black' && gameState.turnStep >= 2);
+            
+            if (!isMyTurn) return;
+            
+            const piece = getPieceAt(row, col);
+            const isMyPiece = piece && piece.color === playerColor;
+            
+            if (selectedSquare && validMoves.some(m => m[0] === row && m[1] === col)) {
+                // Make move
+                const fromRow = selectedSquare[0];
+                const fromCol = selectedSquare[1];
+                makeMove(fromRow, fromCol, row, col);
+                clearSelection();
+            } else if (isMyPiece) {
+                // Select piece
+                selectedSquare = [row, col];
+                updateValidMoves(row, col);
+                updateBoardDisplay();
+            } else {
+                clearSelection();
+            }
+        }
+        
+        function getPieceAt(row, col) {
+            // Check white pieces
+            for (let i = 0; i < gameState.whiteLocations.length; i++) {
+                const loc = gameState.whiteLocations[i];
+                if (loc[0] === col && loc[1] === row) {
+                    return {
+                        color: 'white',
+                        type: gameState.whitePieces[i]
+                    };
+                }
+            }
+            // Check black pieces
+            for (let i = 0; i < gameState.blackLocations.length; i++) {
+                const loc = gameState.blackLocations[i];
+                if (loc[0] === col && loc[1] === row) {
+                    return {
+                        color: 'black',
+                        type: gameState.blackPieces[i]
+                    };
+                }
+            }
+            return null;
+        }
+        
+        function updateValidMoves(row, col) {
+            // Simplified - in real implementation, calculate valid moves
+            validMoves = [];
+            // This would need to communicate with server or calculate client-side
+        }
+        
+        function makeMove(fromRow, fromCol, toRow, toCol) {
+            const fromPos = [fromCol, fromRow];
+            const toPos = [toCol, toRow];
+            
+            socket.emit('make_move', {
+                room_code: roomCode,
+                from_pos: fromPos,
+                to_pos: toPos
+            });
+        }
+        
+        function clearSelection() {
+            selectedSquare = null;
+            validMoves = [];
+            updateBoardDisplay();
+        }
+        
+        function updateBoardDisplay() {
+            // Clear board
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const square = board[row][col];
+                    square.innerHTML = '';
+                    square.classList.remove('selected', 'valid-move');
+                    square.className = `square ${(row + col) % 2 === 0 ? 'light' : 'dark'}`;
+                }
+            }
+            
+            // Draw pieces
+            drawPieces('white');
+            drawPieces('black');
+            
+            // Highlight selected square
+            if (selectedSquare) {
+                const [row, col] = selectedSquare;
+                board[row][col].classList.add('selected');
+                validMoves.forEach(([r, c]) => {
+                    board[r][c].classList.add('valid-move');
+                });
+            }
+        }
+        
+        function drawPieces(color) {
+            const pieces = color === 'white' ? gameState.whitePieces : gameState.blackPieces;
+            const locations = color === 'white' ? gameState.whiteLocations : gameState.blackLocations;
+            
+            for (let i = 0; i < pieces.length; i++) {
+                const piece = pieces[i];
+                const loc = locations[i];
+                const row = loc[1];
+                const col = loc[0];
+                
+                const square = board[row][col];
+                const symbol = pieceSymbols[color][piece];
+                square.innerHTML = `<span class="piece">${symbol}</span>`;
+            }
+        }
+        
+        // Socket event handlers
+        socket.on('connect', () => {
+            console.log('Connected to server');
+        });
+        
+        socket.on('room_created', (data) => {
+            roomCode = data.room_code;
+            playerColor = data.color;
+            document.getElementById('roomCodeDisplay').textContent = roomCode;
+            document.getElementById('menuScreen').classList.add('hidden');
+            document.getElementById('gameScreen').classList.remove('hidden');
+            document.getElementById('statusMessage').textContent = 'Waiting for opponent...';
+            initBoard();
+        });
+        
+        socket.on('joined_room', (data) => {
+            roomCode = data.room_code;
+            playerColor = data.color;
+            document.getElementById('roomCodeDisplay').textContent = roomCode;
+            document.getElementById('menuScreen').classList.add('hidden');
+            document.getElementById('gameScreen').classList.remove('hidden');
+            if (data.status === 'ready') {
+                document.getElementById('statusMessage').textContent = 'Game starting!';
+            } else {
+                document.getElementById('statusMessage').textContent = 'Waiting for opponent...';
+            }
+            initBoard();
+        });
+        
+        socket.on('game_start', () => {
+            document.getElementById('statusMessage').textContent = 'Game started!';
+            initializeGameState();
+            updateBoardDisplay();
+        });
+        
+        socket.on('opponent_move', (data) => {
+            // Update game state with opponent's move
+            // This is simplified - would need proper game state sync
+            updateBoardDisplay();
+        });
+        
+        socket.on('game_state_update', (data) => {
+            gameState = data.game_state;
+            updateBoardDisplay();
+        });
+        
+        function initializeGameState() {
+            // Initialize starting position
+            gameState = {
+                whitePieces: ['rook', 'knight', 'bishop', 'king', 'queen', 'bishop', 'knight', 'rook',
+                             'pawn', 'pawn', 'pawn', 'pawn', 'pawn', 'pawn', 'pawn', 'pawn'],
+                whiteLocations: [[0,0], [1,0], [2,0], [3,0], [4,0], [5,0], [6,0], [7,0],
+                               [0,1], [1,1], [2,1], [3,1], [4,1], [5,1], [6,1], [7,1]],
+                blackPieces: ['rook', 'knight', 'bishop', 'king', 'queen', 'bishop', 'knight', 'rook',
+                             'pawn', 'pawn', 'pawn', 'pawn', 'pawn', 'pawn', 'pawn', 'pawn'],
+                blackLocations: [[0,7], [1,7], [2,7], [3,7], [4,7], [5,7], [6,7], [7,7],
+                               [0,6], [1,6], [2,6], [3,6], [4,6], [5,6], [6,6], [7,6]],
+                turnStep: 0
+            };
+        }
+    </script>
+</body>
+</html>
