@@ -241,7 +241,7 @@
         }
         
         .hidden {
-            display: none;
+            display: none !important;
         }
         
         .room-code-display {
@@ -259,10 +259,16 @@
             width: 100%;
             height: 100%;
             background: rgba(0, 0, 0, 0.7);
-            display: flex;
+            display: none;
             justify-content: center;
             align-items: center;
             z-index: 1000;
+            pointer-events: none;
+        }
+        
+        .promotion-overlay:not(.hidden) {
+            display: flex;
+            pointer-events: auto;
         }
         
         .promotion-menu {
@@ -599,13 +605,17 @@
             gameState = {};
             pendingPromotion = null;
             
+            const promotionOverlay = document.getElementById('promotionOverlay');
+            if (promotionOverlay) {
+                promotionOverlay.classList.add('hidden');
+            }
+            
             document.getElementById('gameScreen').classList.add('hidden');
             document.getElementById('menuScreen').classList.remove('hidden');
             document.getElementById('onlineMenu').classList.add('hidden');
             document.getElementById('joinRoomDiv').classList.add('hidden');
             document.getElementById('roomCodeDisplay').style.display = 'none';
             document.getElementById('roomCodeInput').value = '';
-            document.getElementById('promotionOverlay').classList.add('hidden');
         }
         
         // Board Functions
