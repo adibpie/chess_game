@@ -203,19 +203,34 @@ def handle_forfeit(data):
     room_code = data.get('room_code')
     
     if room_code not in rooms:
+        emit('error', {'message': 'Room does not exist'})
         return
     
     room = rooms[room_code]
+    
+    if request.sid not in room['players']:
+        emit('error', {'message': 'Not in this room'})
+        return
+    
     player_color = room['player_colors'].get(request.sid, 'unknown')
     winner = 'black' if player_color == 'white' else 'white'
     
-    # Notify other player
+    # Notify both players
     for player_id in room['players']:
         if player_id != request.sid:
             emit('opponent_forfeited', {
                 'winner': winner,
                 'message': f'{player_color.capitalize()} forfeited. {winner.capitalize()} wins!'
             }, room=player_id)
+        else:
+            # Also notify the forfeiting player
+            emit('forfeit_confirmed', {
+                'winner': winner,
+                'message': 'You forfeited the game.'
+            })
+    
+    # Clean up room after forfeit
+    del rooms[room_code]
 
 if __name__ == '__main__':
     import os

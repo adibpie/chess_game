@@ -26,12 +26,15 @@
             display: flex;
             gap: 0;
             background: darkgray;
+            width: 1000px;
+            height: 900px;
         }
         
         .board-container {
             position: relative;
             width: 800px;
             height: 900px;
+            flex-shrink: 0;
         }
         
         .game-board {
@@ -102,11 +105,14 @@
         
         .sidebar {
             width: 200px;
+            height: 900px;
             background: gold;
             border: 5px solid gold;
             display: flex;
             flex-direction: column;
             padding: 10px;
+            flex-shrink: 0;
+            overflow-y: auto;
         }
         
         .captured-section {
@@ -172,9 +178,24 @@
             right: 10px;
             top: 50%;
             transform: translateY(-50%);
-            font-size: 40px;
+            font-size: 30px;
             cursor: pointer;
             color: black;
+            background: lightcoral;
+            padding: 5px 15px;
+            border: 2px solid darkred;
+            border-radius: 5px;
+            font-weight: bold;
+            user-select: none;
+        }
+        
+        .forfeit-button:hover {
+            background: red;
+            color: white;
+        }
+        
+        .forfeit-button:active {
+            background: darkred;
         }
         
         .menu-screen {
@@ -360,17 +381,54 @@
         }
         
         function forfeit() {
-            if (currentMode === 'online' && roomCode) {
-                socket.emit('forfeit', { room_code: roomCode });
-            } else {
-                if (gameState.turnStep < 2) {
-                    gameState.winner = 'black';
+            if (confirm('Are you sure you want to forfeit?')) {
+                if (currentMode === 'online' && roomCode) {
+                    socket.emit('forfeit', { room_code: roomCode });
+                    // Also update local state
+                    const forfeitingColor = (playerColor === 'white' && gameState.turnStep < 2) || 
+                                          (playerColor === 'black' && gameState.turnStep >= 2);
+                    gameState.winner = forfeitingColor ? (playerColor === 'white' ? 'black' : 'white') : playerColor;
+                    gameState.gameOver = true;
+                    updateBoardDisplay();
+                    updateStatus();
                 } else {
-                    gameState.winner = 'white';
+                    // Local PvP mode
+                    if (gameState.turnStep < 2) {
+                        gameState.winner = 'black';
+                    } else {
+                        gameState.winner = 'white';
+                    }
+                    gameState.gameOver = true;
+                    updateBoardDisplay();
+                    updateStatus();
                 }
-                gameState.gameOver = true;
-                updateStatus(`${gameState.winner.toUpperCase()} won the game!`);
             }
+        }
+        
+        function goBackToMenu() {
+            if (currentMode === 'online' && roomCode) {
+                if (confirm('Leave the game and return to menu?')) {
+                    socket.emit('forfeit', { room_code: roomCode });
+                    socket.disconnect();
+                } else {
+                    return;
+                }
+            }
+            // Reset state
+            currentMode = null;
+            roomCode = null;
+            playerColor = null;
+            selectedSquare = null;
+            validMoves = [];
+            gameState = {};
+            
+            // Show menu, hide game
+            document.getElementById('gameScreen').classList.add('hidden');
+            document.getElementById('menuScreen').classList.remove('hidden');
+            document.getElementById('onlineMenu').classList.add('hidden');
+            document.getElementById('joinRoomDiv').classList.add('hidden');
+            document.getElementById('roomCodeDisplay').style.display = 'none';
+            document.getElementById('roomCodeInput').value = '';
         }
         
         // Board Functions
@@ -402,13 +460,31 @@
         function handleSquareClick(row, col) {
             if (gameState.gameOver) return;
             
+            // Check if it's the player's turn
+            const isWhiteTurn = gameState.turnStep < 2;
             const isMyTurn = currentMode === 'local' || 
-                            (currentMode === 'online' && ((playerColor === 'white' && gameState.turnStep < 2) || 
-                                                          (playerColor === 'black' && gameState.turnStep >= 2)));
+                            (currentMode === 'online' && ((playerColor === 'white' && isWhiteTurn) || 
+                                                          (playerColor === 'black' && !isWhiteTurn)));
             
-            if (!isMyTurn && currentMode === 'online') return;
+            if (!isMyTurn && currentMode === 'online') {
+                alert('Not your turn!');
+                return;
+            }
             
             const piece = getPieceAt(row, col);
+            
+            // In local mode, check if piece matches current turn
+            if (currentMode === 'local') {
+                if (piece) {
+                    const pieceIsWhite = piece.color === 'white';
+                    if (pieceIsWhite !== isWhiteTurn) {
+                        alert(`It's ${isWhiteTurn ? 'White' : 'Black'}'s turn!`);
+                        return;
+                    }
+                }
+            }
+            
+            // In online mode, check if piece belongs to player
             const isMyPiece = currentMode === 'local' || 
                              (piece && ((playerColor === 'white' && piece.color === 'white') ||
                                        (playerColor === 'black' && piece.color === 'black')));
@@ -571,56 +647,61 @@
         function updateLocalMove(fromPos, toPos) {
             const [fromCol, fromRow] = fromPos;
             const [toCol, toRow] = toPos;
+            const isWhiteTurn = gameState.turnStep < 2;
             
-            // Find and move white piece
-            for (let i = 0; i < gameState.whiteLocations.length; i++) {
-                const loc = gameState.whiteLocations[i];
-                if (loc[0] === fromCol && loc[1] === fromRow) {
-                    gameState.whiteLocations[i] = [toCol, toRow];
-                    // Check for capture
-                    for (let j = gameState.blackLocations.length - 1; j >= 0; j--) {
-                        const blackLoc = gameState.blackLocations[j];
-                        if (blackLoc[0] === toCol && blackLoc[1] === toRow) {
-                            gameState.capturedPiecesWhite.push(gameState.blackPieces[j]);
-                            if (gameState.blackPieces[j] === 'king') {
-                                gameState.winner = 'white';
-                                gameState.gameOver = true;
+            // Find and move white piece (only if it's white's turn)
+            if (isWhiteTurn) {
+                for (let i = 0; i < gameState.whiteLocations.length; i++) {
+                    const loc = gameState.whiteLocations[i];
+                    if (loc[0] === fromCol && loc[1] === fromRow) {
+                        gameState.whiteLocations[i] = [toCol, toRow];
+                        // Check for capture
+                        for (let j = gameState.blackLocations.length - 1; j >= 0; j--) {
+                            const blackLoc = gameState.blackLocations[j];
+                            if (blackLoc[0] === toCol && blackLoc[1] === toRow) {
+                                gameState.capturedPiecesWhite.push(gameState.blackPieces[j]);
+                                if (gameState.blackPieces[j] === 'king') {
+                                    gameState.winner = 'white';
+                                    gameState.gameOver = true;
+                                }
+                                gameState.blackPieces.splice(j, 1);
+                                gameState.blackLocations.splice(j, 1);
                             }
-                            gameState.blackPieces.splice(j, 1);
-                            gameState.blackLocations.splice(j, 1);
                         }
+                        // Advance turn: 0->2, 1->2
+                        gameState.turnStep = 2;
+                        updateBoardDisplay();
+                        updateCapturedPieces();
+                        updateStatus();
+                        return;
                     }
-                    gameState.turnStep = 2;
-                    updateBoardDisplay();
-                    updateCapturedPieces();
-                    updateStatus();
-                    return;
                 }
-            }
-            
-            // Find and move black piece
-            for (let i = 0; i < gameState.blackLocations.length; i++) {
-                const loc = gameState.blackLocations[i];
-                if (loc[0] === fromCol && loc[1] === fromRow) {
-                    gameState.blackLocations[i] = [toCol, toRow];
-                    // Check for capture
-                    for (let j = gameState.whiteLocations.length - 1; j >= 0; j--) {
-                        const whiteLoc = gameState.whiteLocations[j];
-                        if (whiteLoc[0] === toCol && whiteLoc[1] === toRow) {
-                            gameState.capturedPiecesBlack.push(gameState.whitePieces[j]);
-                            if (gameState.whitePieces[j] === 'king') {
-                                gameState.winner = 'black';
-                                gameState.gameOver = true;
+            } else {
+                // Find and move black piece (only if it's black's turn)
+                for (let i = 0; i < gameState.blackLocations.length; i++) {
+                    const loc = gameState.blackLocations[i];
+                    if (loc[0] === fromCol && loc[1] === fromRow) {
+                        gameState.blackLocations[i] = [toCol, toRow];
+                        // Check for capture
+                        for (let j = gameState.whiteLocations.length - 1; j >= 0; j--) {
+                            const whiteLoc = gameState.whiteLocations[j];
+                            if (whiteLoc[0] === toCol && whiteLoc[1] === toRow) {
+                                gameState.capturedPiecesBlack.push(gameState.whitePieces[j]);
+                                if (gameState.whitePieces[j] === 'king') {
+                                    gameState.winner = 'black';
+                                    gameState.gameOver = true;
+                                }
+                                gameState.whitePieces.splice(j, 1);
+                                gameState.whiteLocations.splice(j, 1);
                             }
-                            gameState.whitePieces.splice(j, 1);
-                            gameState.whiteLocations.splice(j, 1);
                         }
+                        // Advance turn: 2->0, 3->0
+                        gameState.turnStep = 0;
+                        updateBoardDisplay();
+                        updateCapturedPieces();
+                        updateStatus();
+                        return;
                     }
-                    gameState.turnStep = 0;
-                    updateBoardDisplay();
-                    updateCapturedPieces();
-                    updateStatus();
-                    return;
                 }
             }
         }
@@ -863,7 +944,28 @@
         socket.on('opponent_forfeited', (data) => {
             gameState.winner = data.winner;
             gameState.gameOver = true;
-            updateStatus(`${data.winner.toUpperCase()} won the game!`);
+            updateBoardDisplay();
+            updateStatus();
+            alert(`${data.winner.toUpperCase()} won! ${data.message || 'Opponent forfeited.'}`);
+        });
+        
+        socket.on('forfeit_confirmed', (data) => {
+            gameState.winner = data.winner;
+            gameState.gameOver = true;
+            updateBoardDisplay();
+            updateStatus();
+            alert(`You forfeited. ${data.winner.toUpperCase()} wins!`);
+        });
+        
+        // Keyboard event handlers
+        document.addEventListener('keydown', function(event) {
+            // Escape key to go back to menu
+            if (event.key === 'Escape' || event.key === 'Esc') {
+                const gameScreen = document.getElementById('gameScreen');
+                if (!gameScreen.classList.contains('hidden')) {
+                    goBackToMenu();
+                }
+            }
         });
     </script>
 </body>
