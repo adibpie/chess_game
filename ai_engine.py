@@ -8,6 +8,7 @@ from constants import *
 class MinimaxAI:
     def __init__(self, depth=3):
         self.depth = depth
+        # Improved piece values (standard chess values)
         self.piece_values = {
             'pawn': 100,
             'knight': 320,
@@ -16,6 +17,73 @@ class MinimaxAI:
             'queen': 900,
             'king': 20000
         }
+        
+        # Piece-square tables for positional evaluation
+        self.pawn_table = [
+            [0,  0,  0,  0,  0,  0,  0,  0],
+            [50, 50, 50, 50, 50, 50, 50, 50],
+            [10, 10, 20, 30, 30, 20, 10, 10],
+            [5,  5, 10, 25, 25, 10,  5,  5],
+            [0,  0,  0, 20, 20,  0,  0,  0],
+            [5, -5,-10,  0,  0,-10, -5,  5],
+            [5, 10, 10,-20,-20, 10, 10,  5],
+            [0,  0,  0,  0,  0,  0,  0,  0]
+        ]
+        
+        self.knight_table = [
+            [-50,-40,-30,-30,-30,-30,-40,-50],
+            [-40,-20,  0,  0,  0,  0,-20,-40],
+            [-30,  0, 10, 15, 15, 10,  0,-30],
+            [-30,  5, 15, 20, 20, 15,  5,-30],
+            [-30,  0, 15, 20, 20, 15,  0,-30],
+            [-30,  5, 10, 15, 15, 10,  5,-30],
+            [-40,-20,  0,  5,  5,  0,-20,-40],
+            [-50,-40,-30,-30,-30,-30,-40,-50]
+        ]
+        
+        self.bishop_table = [
+            [-20,-10,-10,-10,-10,-10,-10,-20],
+            [-10,  0,  0,  0,  0,  0,  0,-10],
+            [-10,  0,  5, 10, 10,  5,  0,-10],
+            [-10,  5,  5, 10, 10,  5,  5,-10],
+            [-10,  0, 10, 10, 10, 10,  0,-10],
+            [-10, 10, 10, 10, 10, 10, 10,-10],
+            [-10,  5,  0,  0,  0,  0,  5,-10],
+            [-20,-10,-10,-10,-10,-10,-10,-20]
+        ]
+        
+        self.rook_table = [
+            [0,  0,  0,  0,  0,  0,  0,  0],
+            [5, 10, 10, 10, 10, 10, 10,  5],
+            [-5,  0,  0,  0,  0,  0,  0, -5],
+            [-5,  0,  0,  0,  0,  0,  0, -5],
+            [-5,  0,  0,  0,  0,  0,  0, -5],
+            [-5,  0,  0,  0,  0,  0,  0, -5],
+            [-5,  0,  0,  0,  0,  0,  0, -5],
+            [0,  0,  0,  5,  5,  0,  0,  0]
+        ]
+        
+        self.queen_table = [
+            [-20,-10,-10, -5, -5,-10,-10,-20],
+            [-10,  0,  0,  0,  0,  0,  0,-10],
+            [-10,  0,  5,  5,  5,  5,  0,-10],
+            [-5,  0,  5,  5,  5,  5,  0, -5],
+            [0,  0,  5,  5,  5,  5,  0, -5],
+            [-10,  5,  5,  5,  5,  5,  0,-10],
+            [-10,  0,  5,  0,  0,  0,  0,-10],
+            [-20,-10,-10, -5, -5,-10,-10,-20]
+        ]
+        
+        self.king_table = [
+            [-30,-40,-40,-50,-50,-40,-40,-30],
+            [-30,-40,-40,-50,-50,-40,-40,-30],
+            [-30,-40,-40,-50,-50,-40,-40,-30],
+            [-30,-40,-40,-50,-50,-40,-40,-30],
+            [-20,-30,-30,-40,-40,-30,-30,-20],
+            [-10,-20,-20,-20,-20,-20,-20,-10],
+            [20, 20,  0,  0,  0,  0, 20, 20],
+            [20, 30, 10,  0,  0, 10, 30, 20]
+        ]
     
     def get_move(self, game_state):
         """Get the best move using minimax algorithm"""
@@ -26,7 +94,7 @@ class MinimaxAI:
         return None
     
     def _minimax(self, state, depth, maximizing, alpha, beta):
-        """Minimax algorithm with alpha-beta pruning"""
+        """Minimax algorithm with alpha-beta pruning and move ordering"""
         if depth == 0 or state.game_over:
             return (self._evaluate(state), None)
         
@@ -34,12 +102,19 @@ class MinimaxAI:
             max_eval = float('-inf')
             best_move = None
             moves = self._get_all_moves(state, 'black')
-            random.shuffle(moves)  # Add some randomness
+            
+            # Move ordering: prioritize captures and checks
+            moves = self._order_moves(state, moves, 'black')
             
             for move in moves:
                 new_state = self._make_test_move(state, move, 'black')
                 if new_state:
-                    eval_score = self._minimax(new_state, depth - 1, False, alpha, beta)[0]
+                    # Quiescence search for captures at leaf nodes
+                    if depth == 1:
+                        eval_score = self._quiescence(new_state, alpha, beta, False)
+                    else:
+                        eval_score = self._minimax(new_state, depth - 1, False, alpha, beta)[0]
+                    
                     if eval_score > max_eval:
                         max_eval = eval_score
                         best_move = move
@@ -52,10 +127,17 @@ class MinimaxAI:
             best_move = None
             moves = self._get_all_moves(state, 'white')
             
+            # Move ordering
+            moves = self._order_moves(state, moves, 'white')
+            
             for move in moves:
                 new_state = self._make_test_move(state, move, 'white')
                 if new_state:
-                    eval_score = self._minimax(new_state, depth - 1, True, alpha, beta)[0]
+                    if depth == 1:
+                        eval_score = self._quiescence(new_state, alpha, beta, True)
+                    else:
+                        eval_score = self._minimax(new_state, depth - 1, True, alpha, beta)[0]
+                    
                     if eval_score < min_eval:
                         min_eval = eval_score
                         best_move = move
@@ -63,6 +145,97 @@ class MinimaxAI:
                     if beta <= alpha:
                         break  # Alpha-beta pruning
             return (min_eval, best_move)
+    
+    def _quiescence(self, state, alpha, beta, maximizing):
+        """Quiescence search for captures"""
+        stand_pat = self._evaluate(state)
+        
+        if maximizing:
+            if stand_pat >= beta:
+                return beta
+            if alpha < stand_pat:
+                alpha = stand_pat
+        else:
+            if stand_pat <= alpha:
+                return alpha
+            if beta > stand_pat:
+                beta = stand_pat
+        
+        # Only search captures
+        moves = self._get_capture_moves(state, 'black' if maximizing else 'white')
+        moves = self._order_moves(state, moves, 'black' if maximizing else 'white')
+        
+        for move in moves[:5]:  # Limit to top 5 captures
+            new_state = self._make_test_move(state, move, 'black' if maximizing else 'white')
+            if new_state:
+                score = self._quiescence(new_state, alpha, beta, not maximizing)
+                if maximizing:
+                    if score >= beta:
+                        return beta
+                    if score > alpha:
+                        alpha = score
+                else:
+                    if score <= alpha:
+                        return alpha
+                    if score < beta:
+                        beta = score
+        
+        return alpha if maximizing else beta
+    
+    def _get_capture_moves(self, state, color):
+        """Get only capture moves"""
+        moves = []
+        if color == 'black':
+            pieces = state.black_pieces
+            locations = state.black_locations
+            options = state.black_options
+            enemy_locations = state.white_locations
+        else:
+            pieces = state.white_pieces
+            locations = state.white_locations
+            options = state.white_options
+            enemy_locations = state.black_locations
+        
+        for i in range(len(pieces)):
+            for move in options[i]:
+                if move in enemy_locations:
+                    moves.append((locations[i], move))
+        return moves
+    
+    def _order_moves(self, state, moves, color):
+        """Order moves by priority (captures first, then by piece value)"""
+        def move_priority(move):
+            from_pos, to_pos = move
+            priority = 0
+            
+            # Check if it's a capture
+            if color == 'black':
+                if to_pos in state.white_locations:
+                    captured_idx = state.white_locations.index(to_pos)
+                    captured_piece = state.white_pieces[captured_idx]
+                    priority += self.piece_values.get(captured_piece, 0)
+            else:
+                if to_pos in state.black_locations:
+                    captured_idx = state.black_locations.index(to_pos)
+                    captured_piece = state.black_pieces[captured_idx]
+                    priority += self.piece_values.get(captured_piece, 0)
+            
+            # Check piece value (prefer moving valuable pieces)
+            if color == 'black':
+                if from_pos in state.black_locations:
+                    piece_idx = state.black_locations.index(from_pos)
+                    piece = state.black_pieces[piece_idx]
+                    priority += self.piece_values.get(piece, 0) // 10
+            else:
+                if from_pos in state.white_locations:
+                    piece_idx = state.white_locations.index(from_pos)
+                    piece = state.white_pieces[piece_idx]
+                    priority += self.piece_values.get(piece, 0) // 10
+            
+            return priority
+        
+        moves.sort(key=move_priority, reverse=True)
+        return moves
     
     def _get_all_moves(self, state, color):
         """Get all possible moves for a color"""
@@ -125,14 +298,8 @@ class MinimaxAI:
             return None
     
     def _evaluate(self, state):
-        """Evaluate the board position"""
+        """Evaluate the board position with advanced heuristics"""
         score = 0
-        
-        # Material evaluation
-        for piece in state.white_pieces:
-            score += self.piece_values.get(piece, 0)
-        for piece in state.black_pieces:
-            score -= self.piece_values.get(piece, 0)
         
         # Check for checkmate
         if state.winner == 'white':
@@ -140,32 +307,114 @@ class MinimaxAI:
         elif state.winner == 'black':
             return -100000
         
-        # Position evaluation (simple piece-square tables)
+        # Material evaluation
+        white_material = sum(self.piece_values.get(piece, 0) for piece in state.white_pieces)
+        black_material = sum(self.piece_values.get(piece, 0) for piece in state.black_pieces)
+        score += white_material - black_material
+        
+        # Position evaluation using piece-square tables
         score += self._position_score(state.white_pieces, state.white_locations, True)
         score -= self._position_score(state.black_pieces, state.black_locations, False)
+        
+        # Mobility (number of legal moves)
+        white_mobility = sum(len(moves) for moves in state.white_options)
+        black_mobility = sum(len(moves) for moves in state.black_options)
+        score += (white_mobility - black_mobility) * 2
+        
+        # King safety
+        score += self._king_safety(state, True) - self._king_safety(state, False)
+        
+        # Pawn structure
+        score += self._pawn_structure(state, True) - self._pawn_structure(state, False)
         
         return score
     
     def _position_score(self, pieces, locations, is_white):
-        """Simple position evaluation based on piece placement"""
+        """Position evaluation using piece-square tables"""
         score = 0
-        center_squares = [(3, 3), (3, 4), (4, 3), (4, 4)]
         
         for i, piece in enumerate(pieces):
-            pos = locations[i]
-            # Reward centralization
-            if pos in center_squares:
-                score += 20
+            if i >= len(locations):
+                continue
+            col, row = locations[i]
             
-            # Piece-specific bonuses
+            # Flip table for black pieces
+            table_row = row if is_white else 7 - row
+            
             if piece == 'pawn':
-                if is_white:
-                    score += (7 - pos[1]) * 5  # Reward advancing pawns
-                else:
-                    score += pos[1] * 5
-            elif piece == 'knight' or piece == 'bishop':
-                if pos in center_squares:
-                    score += 10
+                score += self.pawn_table[table_row][col]
+            elif piece == 'knight':
+                score += self.knight_table[table_row][col]
+            elif piece == 'bishop':
+                score += self.bishop_table[table_row][col]
+            elif piece == 'rook':
+                score += self.rook_table[table_row][col]
+            elif piece == 'queen':
+                score += self.queen_table[table_row][col]
+            elif piece == 'king':
+                score += self.king_table[table_row][col]
+        
+        return score
+    
+    def _king_safety(self, state, is_white):
+        """Evaluate king safety"""
+        score = 0
+        if is_white:
+            if 'king' in state.white_pieces:
+                king_idx = state.white_pieces.index('king')
+                king_pos = state.white_locations[king_idx]
+                # Check if king is in check
+                for moves in state.black_options:
+                    if king_pos in moves:
+                        score -= 50  # Penalty for being in check
+        else:
+            if 'king' in state.black_pieces:
+                king_idx = state.black_pieces.index('king')
+                king_pos = state.black_locations[king_idx]
+                for moves in state.white_options:
+                    if king_pos in moves:
+                        score -= 50
+        return score
+    
+    def _pawn_structure(self, state, is_white):
+        """Evaluate pawn structure"""
+        score = 0
+        pawns = state.white_pieces if is_white else state.black_pieces
+        locations = state.white_locations if is_white else state.black_locations
+        
+        pawn_locations = [locations[i] for i, p in enumerate(pawns) if p == 'pawn']
+        
+        # Doubled pawns (penalty)
+        cols = [loc[0] for loc in pawn_locations]
+        for col in set(cols):
+            if cols.count(col) > 1:
+                score -= 20 * (cols.count(col) - 1)
+        
+        # Isolated pawns (penalty)
+        for col, row in pawn_locations:
+            has_neighbor = False
+            for c, r in pawn_locations:
+                if abs(c - col) == 1:
+                    has_neighbor = True
+                    break
+            if not has_neighbor:
+                score -= 15
+        
+        # Passed pawns (bonus)
+        for col, row in pawn_locations:
+            is_passed = True
+            enemy_pawns = state.black_locations if is_white else state.white_locations
+            enemy_pawn_pieces = state.black_pieces if is_white else state.white_pieces
+            
+            for i, piece in enumerate(enemy_pawn_pieces):
+                if piece == 'pawn':
+                    e_col, e_row = enemy_pawns[i]
+                    if abs(e_col - col) <= 1 and ((is_white and e_row > row) or (not is_white and e_row < row)):
+                        is_passed = False
+                        break
+            
+            if is_passed:
+                score += 30
         
         return score
 
@@ -186,50 +435,89 @@ class StockfishAI:
             # Try to find Stockfish
             import subprocess
             import platform
+            import os
             
             # Common paths for Stockfish
             if platform.system() == 'Windows':
                 stockfish_paths = [
                     'stockfish.exe',
+                    './stockfish.exe',
+                    os.path.join(os.getcwd(), 'stockfish.exe'),
                     'C:/stockfish/stockfish.exe',
-                    './stockfish.exe'
+                    os.path.expanduser('~/stockfish.exe')
                 ]
             else:
                 stockfish_paths = [
                     'stockfish',
+                    './stockfish',
                     '/usr/bin/stockfish',
                     '/usr/local/bin/stockfish',
-                    './stockfish'
+                    '/opt/homebrew/bin/stockfish'  # macOS Apple Silicon
                 ]
             
             stockfish_path = None
             for path in stockfish_paths:
                 try:
-                    result = subprocess.run([path, '--help'], capture_output=True, timeout=1)
-                    if result.returncode == 0 or 'Stockfish' in str(result.stderr):
+                    # Check if file exists
+                    if not os.path.exists(path):
+                        continue
+                    # Try to run it
+                    result = subprocess.run([path, '--help'], capture_output=True, timeout=2)
+                    if result.returncode == 0 or 'Stockfish' in str(result.stderr) or 'Stockfish' in str(result.stdout):
                         stockfish_path = path
+                        print(f"Found Stockfish at: {path}")
                         break
-                except:
+                except Exception as e:
                     continue
             
             if stockfish_path:
-                self.engine = chess.engine.SimpleEngine.popen_uci(stockfish_path)
-                # Configure for stronger play
-                self.engine.configure({
-                    "Skill Level": 20,  # Maximum skill
-                    "UCI_LimitStrength": False,
-                    "Threads": 4,
-                    "Hash": 256
-                })
-                self.chess_board = chess.Board()
+                try:
+                    self.engine = chess.engine.SimpleEngine.popen_uci(stockfish_path)
+                    # Configure for maximum strength
+                    self.engine.configure({
+                        "Skill Level": 20,  # Maximum skill (0-20)
+                        "UCI_LimitStrength": False,
+                        "Threads": 4,
+                        "Hash": 512,  # More hash for better play
+                        "MultiPV": 1,
+                        "Contempt": 0
+                    })
+                    self.chess_board = chess.Board()
+                    print("Stockfish engine initialized successfully!")
+                except Exception as e:
+                    print(f"Error starting Stockfish engine: {e}")
+                    self.engine = None
             else:
-                print("Stockfish not found. Falling back to minimax.")
-                self.engine = None
+                print("Stockfish not found. Attempting to download...")
+                # Try to download Stockfish
+                try:
+                    from install_stockfish import install_stockfish
+                    downloaded_path = install_stockfish()
+                    if downloaded_path and os.path.exists(downloaded_path):
+                        self.engine = chess.engine.SimpleEngine.popen_uci(downloaded_path)
+                        self.engine.configure({
+                            "Skill Level": 20,
+                            "UCI_LimitStrength": False,
+                            "Threads": 4,
+                            "Hash": 512
+                        })
+                        self.chess_board = chess.Board()
+                        print("Stockfish downloaded and initialized!")
+                    else:
+                        print("Could not download Stockfish. Falling back to minimax.")
+                        self.engine = None
+                except Exception as e:
+                    print(f"Could not download Stockfish: {e}")
+                    print("Please download Stockfish manually from: https://stockfishchess.org/download/")
+                    print("Or install via package manager.")
+                    self.engine = None
         except ImportError:
             print("python-chess not installed. Install with: pip install python-chess")
             self.engine = None
         except Exception as e:
             print(f"Error initializing Stockfish: {e}")
+            import traceback
+            traceback.print_exc()
             self.engine = None
     
     def get_move(self, game_state):
@@ -253,9 +541,13 @@ class StockfishAI:
                     minimax = MinimaxAI(depth=3)
                     return minimax.get_move(game_state)
                 
-                # Get best move from Stockfish with better time limit and depth
-                result = self.engine.play(board, chess.engine.Limit(time=1.5, depth=18))
+                # Get best move from Stockfish with maximum strength
+                # Use both time and depth limits for best play
+                result = self.engine.play(board, chess.engine.Limit(time=2.0, depth=20))
                 move = result.move
+                
+                # Log the move for debugging
+                print(f"Stockfish move: {move} (from {move.from_square} to {move.to_square})")
                 
                 # Convert chess.Move to our format
                 # chess library: square = row * 8 + col, where row 0 is bottom (a1)

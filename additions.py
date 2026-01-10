@@ -88,32 +88,46 @@ def sync_globals():
 
 # draw main game board
 def draw_board():
-    for i in range(32):
-        column = i % 4
-        row = i // 4
-        if row % 2 == 0:
-            pygame.draw.rect(screen, 'light gray', [600 - (column * 200), row * 100, 100, 100])
-        else:
-            pygame.draw.rect(screen, 'light gray', [700 - (column * 200), row * 100, 100, 100])
-        pygame.draw.rect(screen, 'gray', [0, 800, WIDTH, 100])
-        pygame.draw.rect(screen, 'gold', [0, 800, WIDTH, 100], 5)
-        pygame.draw.rect(screen, 'gold', [800, 0, 200, HEIGHT], 5)
-        # Show AI thinking status
-        if current_mode == GAME_MODE_AI and hasattr(game_state, 'ai_thinking') and game_state.ai_thinking:
-            status_text = 'Black is deciding the move...'
-            screen.blit(big_font.render(status_text, True, 'black'), (20, 820))
-        else:
-            status_text = ['White: Select a Piece to Move!', 'White: Select a Destination!',
-                           'Black: Select a Piece to Move!', 'Black: Select a Destination!']
-            screen.blit(big_font.render(status_text[turn_step], True, 'black'), (20, 820))
-        for i in range(9):
-            pygame.draw.line(screen, 'black', (0, 100 * i), (800, 100 * i), 2)
-            pygame.draw.line(screen, 'black', (100 * i, 0), (100 * i, 800), 2)
-        screen.blit(medium_font.render('FORFEIT', True, 'black'), (810, 830))
-        if white_promote or black_promote:
-            pygame.draw.rect(screen, 'gray', [0, 800, WIDTH - 200, 100])
-            pygame.draw.rect(screen, 'gold', [0, 800, WIDTH - 200, 100], 5)
-            screen.blit(big_font.render('Select Piece to Promote Pawn', True, 'black'), (20, 820))
+    # Draw checkerboard pattern
+    for row in range(8):
+        for col in range(8):
+            x = col * 100
+            y = row * 100
+            # Alternate colors
+            if (row + col) % 2 == 0:
+                pygame.draw.rect(screen, (240, 217, 181), [x, y, 100, 100])  # Light square
+            else:
+                pygame.draw.rect(screen, (181, 136, 99), [x, y, 100, 100])  # Dark square
+    
+    # Draw status bar at bottom
+    pygame.draw.rect(screen, 'gray', [0, 800, WIDTH, 100])
+    pygame.draw.rect(screen, 'gold', [0, 800, WIDTH, 100], 5)
+    
+    # Draw sidebar for captured pieces
+    pygame.draw.rect(screen, 'gold', [800, 0, 200, HEIGHT], 5)
+    
+    # Show AI thinking status
+    if current_mode == GAME_MODE_AI and hasattr(game_state, 'ai_thinking') and game_state.ai_thinking:
+        status_text = 'Black is deciding the move...'
+        screen.blit(big_font.render(status_text, True, 'black'), (20, 820))
+    else:
+        status_text = ['White: Select a Piece to Move!', 'White: Select a Destination!',
+                       'Black: Select a Piece to Move!', 'Black: Select a Destination!']
+        screen.blit(big_font.render(status_text[turn_step], True, 'black'), (20, 820))
+    
+    # Draw grid lines
+    for i in range(9):
+        pygame.draw.line(screen, 'black', (0, 100 * i), (800, 100 * i), 2)
+        pygame.draw.line(screen, 'black', (100 * i, 0), (100 * i, 800), 2)
+    
+    # Draw forfeit button
+    screen.blit(medium_font.render('FORFEIT', True, 'black'), (810, 830))
+    
+    # Promotion overlay
+    if white_promote or black_promote:
+        pygame.draw.rect(screen, 'gray', [0, 800, WIDTH - 200, 100])
+        pygame.draw.rect(screen, 'gold', [0, 800, WIDTH - 200, 100], 5)
+        screen.blit(big_font.render('Select Piece to Promote Pawn', True, 'black'), (20, 820))
 
 
 # draw pieces onto board
@@ -270,39 +284,67 @@ def check_rook(position, color):
 def check_pawn(position, color):
     moves_list = []
     if color == 'white':
-        if (position[0], position[1] + 1) not in white_locations and \
-                (position[0], position[1] + 1) not in black_locations and position[1] < 7:
-            moves_list.append((position[0], position[1] + 1))
-            # indent the check for two spaces ahead, so it is only checked if one space ahead is also open
-            if (position[0], position[1] + 2) not in white_locations and \
-                    (position[0], position[1] + 2) not in black_locations and position[1] == 1:
-                moves_list.append((position[0], position[1] + 2))
-        if (position[0] + 1, position[1] + 1) in black_locations:
-            moves_list.append((position[0] + 1, position[1] + 1))
-        if (position[0] - 1, position[1] + 1) in black_locations:
-            moves_list.append((position[0] - 1, position[1] + 1))
-        # add en passant move checker
-        if (position[0] + 1, position[1] + 1) == black_ep:
-            moves_list.append((position[0] + 1, position[1] + 1))
-        if (position[0] - 1, position[1] + 1) == black_ep:
-            moves_list.append((position[0] - 1, position[1] + 1))
-    else:
-        if (position[0], position[1] - 1) not in white_locations and \
-                (position[0], position[1] - 1) not in black_locations and position[1] > 0:
-            moves_list.append((position[0], position[1] - 1))
-            # indent the check for two spaces ahead, so it is only checked if one space ahead is also open
-            if (position[0], position[1] - 2) not in white_locations and \
-                    (position[0], position[1] - 2) not in black_locations and position[1] == 6:
-                moves_list.append((position[0], position[1] - 2))
-        if (position[0] + 1, position[1] - 1) in white_locations:
-            moves_list.append((position[0] + 1, position[1] - 1))
-        if (position[0] - 1, position[1] - 1) in white_locations:
-            moves_list.append((position[0] - 1, position[1] - 1))
-        # add en passant move checker
-        if (position[0] + 1, position[1] - 1) == white_ep:
-            moves_list.append((position[0] + 1, position[1] - 1))
-        if (position[0] - 1, position[1] - 1) == white_ep:
-            moves_list.append((position[0] - 1, position[1] - 1))
+        # Forward move (one square) - white moves down (increasing row)
+        forward_one = (position[0], position[1] + 1)
+        if forward_one not in white_locations and forward_one not in black_locations and position[1] < 7:
+            moves_list.append(forward_one)
+            # Double move from starting position (row 1 for white)
+            if position[1] == 1:
+                forward_two = (position[0], position[1] + 2)
+                if forward_two not in white_locations and forward_two not in black_locations:
+                    moves_list.append(forward_two)
+        
+        # Diagonal captures (right) - can only capture if enemy piece is there
+        if position[0] < 7 and position[1] < 7:
+            capture_right = (position[0] + 1, position[1] + 1)
+            if capture_right in black_locations:
+                moves_list.append(capture_right)
+        
+        # Diagonal captures (left)
+        if position[0] > 0 and position[1] < 7:
+            capture_left = (position[0] - 1, position[1] + 1)
+            if capture_left in black_locations:
+                moves_list.append(capture_left)
+        
+        # En passant captures
+        if black_ep != (100, 100):
+            ep_right = (position[0] + 1, position[1] + 1)
+            ep_left = (position[0] - 1, position[1] + 1)
+            if ep_right == black_ep and position[0] < 7:
+                moves_list.append(black_ep)
+            elif ep_left == black_ep and position[0] > 0:
+                moves_list.append(black_ep)
+    else:  # black
+        # Forward move (one square) - black moves up (decreasing row)
+        forward_one = (position[0], position[1] - 1)
+        if forward_one not in white_locations and forward_one not in black_locations and position[1] > 0:
+            moves_list.append(forward_one)
+            # Double move from starting position (row 6 for black)
+            if position[1] == 6:
+                forward_two = (position[0], position[1] - 2)
+                if forward_two not in white_locations and forward_two not in black_locations:
+                    moves_list.append(forward_two)
+        
+        # Diagonal captures (right)
+        if position[0] < 7 and position[1] > 0:
+            capture_right = (position[0] + 1, position[1] - 1)
+            if capture_right in white_locations:
+                moves_list.append(capture_right)
+        
+        # Diagonal captures (left)
+        if position[0] > 0 and position[1] > 0:
+            capture_left = (position[0] - 1, position[1] - 1)
+            if capture_left in white_locations:
+                moves_list.append(capture_left)
+        
+        # En passant captures
+        if white_ep != (100, 100):
+            ep_right = (position[0] + 1, position[1] - 1)
+            ep_left = (position[0] - 1, position[1] - 1)
+            if ep_right == white_ep and position[0] < 7:
+                moves_list.append(white_ep)
+            elif ep_left == white_ep and position[0] > 0:
+                moves_list.append(white_ep)
     return moves_list
 
 
@@ -608,7 +650,9 @@ while run:
                     reset_game()
                     # Import AI engine here to avoid circular imports
                     from ai_engine import MinimaxAI
-                    ai_opponent = MinimaxAI(menu.ai_difficulty)
+                    # Increase depth for better play (depth 3-5 becomes 4-6)
+                    ai_depth = menu.ai_difficulty + 1
+                    ai_opponent = MinimaxAI(ai_depth)
                     # Initialize AI thinking state
                     game_state.ai_thinking = False
                 elif clicked == 'stockfish':
