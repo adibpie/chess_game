@@ -159,17 +159,18 @@ def handle_move(data):
         emit('error', {'message': 'Not in this room'})
         return
     
-    # Broadcast move to other player
+    # Update game state if provided
+    if 'game_state' in data:
+        room['game_state'] = data['game_state']
+    
+    # Broadcast move and game state to other player
     for player_id in room['players']:
         if player_id != request.sid:
             emit('opponent_move', {
                 'from_pos': from_pos,
-                'to_pos': to_pos
+                'to_pos': to_pos,
+                'game_state': room.get('game_state')
             }, room=player_id)
-    
-    # Update game state if provided
-    if 'game_state' in data:
-        room['game_state'] = data['game_state']
 
 @socketio.on('update_game_state')
 def handle_update_state(data):

@@ -594,9 +594,7 @@ while run:
     
     if in_menu:
         screen.fill('dark gray')
-        if menu.showing_ai_selection:
-            buttons = menu.draw_ai_selection()
-        elif menu.entering_room_code:
+        if menu.entering_room_code:
             buttons = menu.draw_online_menu()
         else:
             buttons = menu.draw_main_menu()

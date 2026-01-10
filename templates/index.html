@@ -67,11 +67,18 @@
         
         .square.valid-move::after {
             content: '';
-            width: 20px;
-            height: 20px;
+            width: 10px;
+            height: 10px;
             border-radius: 50%;
             background: red;
             position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        
+        .square.valid-move.blue-move::after {
+            background: blue;
         }
         
         .piece {
@@ -128,6 +135,7 @@
             padding: 0 20px;
             font-size: 50px;
             color: black;
+            font-weight: normal;
         }
         
         .forfeit-button {
@@ -485,7 +493,7 @@
                 for (let col = 0; col < 8; col++) {
                     const square = board[row][col];
                     square.innerHTML = '';
-                    square.classList.remove('selected', 'valid-move');
+                    square.classList.remove('selected', 'valid-move', 'blue-move');
                     square.className = `square ${(row + col) % 2 === 0 ? 'light' : 'dark'}`;
                 }
             }
@@ -495,9 +503,14 @@
             
             if (selectedSquare) {
                 const [row, col] = selectedSquare;
+                const piece = getPieceAt(row, col);
+                const isWhite = piece && piece.color === 'white';
                 board[row][col].classList.add('selected');
                 validMoves.forEach(([r, c]) => {
                     board[r][c].classList.add('valid-move');
+                    if (!isWhite) {
+                        board[r][c].classList.add('blue-move');
+                    }
                 });
             }
         }
@@ -604,7 +617,22 @@
         });
         
         socket.on('opponent_move', (data) => {
-            updateLocalMove(data.from_pos, data.to_pos);
+            if (data.game_state) {
+                // Update from server game state
+                gameState.whitePieces = data.game_state.whitePieces || data.game_state.white_pieces || [];
+                gameState.whiteLocations = data.game_state.whiteLocations || data.game_state.white_locations || [];
+                gameState.blackPieces = data.game_state.blackPieces || data.game_state.black_pieces || [];
+                gameState.blackLocations = data.game_state.blackLocations || data.game_state.black_locations || [];
+                gameState.capturedPiecesWhite = data.game_state.capturedPiecesWhite || data.game_state.captured_pieces_white || [];
+                gameState.capturedPiecesBlack = data.game_state.capturedPiecesBlack || data.game_state.captured_pieces_black || [];
+                gameState.turnStep = data.game_state.turnStep || data.game_state.turn_step || 0;
+                gameState.gameOver = data.game_state.gameOver || data.game_state.game_over || false;
+                gameState.winner = data.game_state.winner || '';
+                updateBoardDisplay();
+                updateCapturedPieces();
+            } else {
+                updateLocalMove(data.from_pos, data.to_pos);
+            }
             const statusText = ['White: Select a Piece to Move!', 'White: Select a Destination!',
                                'Black: Select a Piece to Move!', 'Black: Select a Destination!'];
             updateStatus(statusText[gameState.turnStep]);

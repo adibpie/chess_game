@@ -48,8 +48,12 @@ class OnlineClient:
             from_pos = tuple(data['from_pos'])
             to_pos = tuple(data['to_pos'])
             print(f"Opponent moved: {from_pos} -> {to_pos}")
-            # Apply opponent's move
-            self.game_state.make_move(from_pos, to_pos)
+            # Update from game state if provided
+            if 'game_state' in data and data['game_state']:
+                self.game_state.load_board_state(data['game_state'])
+            else:
+                # Apply opponent's move
+                self.game_state.make_move(from_pos, to_pos)
             self.my_turn = True
         
         @self.sio.on('game_state_update')

@@ -59,36 +59,47 @@ class GameState:
     def get_board_state(self):
         """Return serializable board state for online play"""
         return {
-            'white_pieces': self.white_pieces.copy(),
-            'white_locations': self.white_locations.copy(),
-            'black_pieces': self.black_pieces.copy(),
-            'black_locations': self.black_locations.copy(),
-            'white_moved': self.white_moved.copy(),
-            'black_moved': self.black_moved.copy(),
-            'captured_pieces_white': self.captured_pieces_white.copy(),
-            'captured_pieces_black': self.captured_pieces_black.copy(),
-            'turn_step': self.turn_step,
-            'white_ep': self.white_ep,
-            'black_ep': self.black_ep,
+            'whitePieces': self.white_pieces.copy(),
+            'whiteLocations': [[loc[0], loc[1]] for loc in self.white_locations],
+            'blackPieces': self.black_pieces.copy(),
+            'blackLocations': [[loc[0], loc[1]] for loc in self.black_locations],
+            'capturedPiecesWhite': self.captured_pieces_white.copy(),
+            'capturedPiecesBlack': self.captured_pieces_black.copy(),
+            'turnStep': self.turn_step,
+            'whiteEp': list(self.white_ep) if self.white_ep != (100, 100) else [100, 100],
+            'blackEp': list(self.black_ep) if self.black_ep != (100, 100) else [100, 100],
             'winner': self.winner,
-            'game_over': self.game_over
+            'gameOver': self.game_over
         }
     
     def load_board_state(self, state):
         """Load board state from serialized data"""
-        self.white_pieces = state['white_pieces']
-        self.white_locations = state['white_locations']
-        self.black_pieces = state['black_pieces']
-        self.black_locations = state['black_locations']
-        self.white_moved = state['white_moved']
-        self.black_moved = state['black_moved']
-        self.captured_pieces_white = state['captured_pieces_white']
-        self.captured_pieces_black = state['captured_pieces_black']
-        self.turn_step = state['turn_step']
-        self.white_ep = state['white_ep']
-        self.black_ep = state['black_ep']
-        self.winner = state['winner']
-        self.game_over = state['game_over']
+        # Handle both old and new format
+        if 'whitePieces' in state:
+            self.white_pieces = state['whitePieces']
+            self.white_locations = [tuple(loc) for loc in state['whiteLocations']]
+            self.black_pieces = state['blackPieces']
+            self.black_locations = [tuple(loc) for loc in state['blackLocations']]
+            self.captured_pieces_white = state.get('capturedPiecesWhite', [])
+            self.captured_pieces_black = state.get('capturedPiecesBlack', [])
+            self.turn_step = state.get('turnStep', 0)
+            self.white_ep = tuple(state.get('whiteEp', [100, 100]))
+            self.black_ep = tuple(state.get('blackEp', [100, 100]))
+            self.winner = state.get('winner', '')
+            self.game_over = state.get('gameOver', False)
+        else:
+            # Old format compatibility
+            self.white_pieces = state.get('white_pieces', state.get('whitePieces', []))
+            self.white_locations = [tuple(loc) if isinstance(loc, list) else loc for loc in state.get('white_locations', state.get('whiteLocations', []))]
+            self.black_pieces = state.get('black_pieces', state.get('blackPieces', []))
+            self.black_locations = [tuple(loc) if isinstance(loc, list) else loc for loc in state.get('black_locations', state.get('blackLocations', []))]
+            self.captured_pieces_white = state.get('captured_pieces_white', state.get('capturedPiecesWhite', []))
+            self.captured_pieces_black = state.get('captured_pieces_black', state.get('capturedPiecesBlack', []))
+            self.turn_step = state.get('turn_step', state.get('turnStep', 0))
+            self.white_ep = tuple(state.get('white_ep', state.get('whiteEp', [100, 100]))) if isinstance(state.get('white_ep', state.get('whiteEp', [100, 100])), list) else state.get('white_ep', state.get('whiteEp', (100, 100)))
+            self.black_ep = tuple(state.get('black_ep', state.get('blackEp', [100, 100]))) if isinstance(state.get('black_ep', state.get('blackEp', [100, 100])), list) else state.get('black_ep', state.get('blackEp', (100, 100)))
+            self.winner = state.get('winner', '')
+            self.game_over = state.get('game_over', state.get('gameOver', False))
         self._update_options()
     
     def make_move(self, from_pos, to_pos, promotion_piece=None):
