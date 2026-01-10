@@ -30,6 +30,8 @@
         
         .board-container {
             position: relative;
+            width: 800px;
+            height: 900px;
         }
         
         .game-board {
@@ -39,6 +41,7 @@
             width: 800px;
             height: 800px;
             border: 2px solid black;
+            background: #f0d9b5;
         }
         
         .square {
@@ -139,9 +142,29 @@
             display: flex;
             align-items: center;
             padding: 0 20px;
-            font-size: 50px;
+            font-size: 40px;
             color: black;
-            font-weight: normal;
+            font-weight: bold;
+            z-index: 100;
+        }
+        
+        .turn-indicator {
+            font-size: 50px;
+            font-weight: bold;
+            margin-right: 20px;
+            padding: 5px 15px;
+            border: 3px solid black;
+            background: white;
+        }
+        
+        .turn-indicator.white-turn {
+            background: white;
+            color: black;
+        }
+        
+        .turn-indicator.black-turn {
+            background: black;
+            color: white;
         }
         
         .forfeit-button {
@@ -226,7 +249,8 @@
             <div class="board-container">
                 <div id="gameBoard" class="game-board"></div>
                 <div class="status-bar">
-                    <span id="statusMessage">White: Select a Piece to Move!</span>
+                    <span id="turnIndicator" class="turn-indicator white-turn">WHITE</span>
+                    <span id="statusMessage">Select a Piece to Move!</span>
                     <span class="forfeit-button" onclick="forfeit()">FORFEIT</span>
                 </div>
             </div>
@@ -313,7 +337,7 @@
             initializeGameState();
             initBoard();
             updateBoardDisplay();
-            updateStatus('White: Select a Piece to Move!');
+            updateStatus();
         }
         
         function showOnlineMenu() {
@@ -355,11 +379,14 @@
             boardDiv.innerHTML = '';
             board = [];
             
+            // Create all 8 rows and 8 columns (64 squares total)
             for (let row = 0; row < 8; row++) {
                 board[row] = [];
                 for (let col = 0; col < 8; col++) {
                     const square = document.createElement('div');
-                    square.className = `square ${(row + col) % 2 === 0 ? 'light' : 'dark'}`;
+                    // Checkerboard pattern: light squares when (row + col) is even
+                    const isLight = (row + col) % 2 === 0;
+                    square.className = `square ${isLight ? 'light' : 'dark'}`;
                     square.dataset.row = row;
                     square.dataset.col = col;
                     square.onclick = () => handleSquareClick(row, col);
@@ -367,6 +394,9 @@
                     board[row][col] = square;
                 }
             }
+            
+            // Verify we created 64 squares
+            console.log(`Board initialized: ${boardDiv.children.length} squares (should be 64)`);
         }
         
         function handleSquareClick(row, col) {
@@ -563,7 +593,7 @@
                     gameState.turnStep = 2;
                     updateBoardDisplay();
                     updateCapturedPieces();
-                    updateStatus('Black: Select a Piece to Move!');
+                    updateStatus();
                     return;
                 }
             }
@@ -589,7 +619,7 @@
                     gameState.turnStep = 0;
                     updateBoardDisplay();
                     updateCapturedPieces();
-                    updateStatus('White: Select a Piece to Move!');
+                    updateStatus();
                     return;
                 }
             }
@@ -602,12 +632,24 @@
         }
         
         function updateBoardDisplay() {
+            // Ensure board is initialized
+            if (!board || board.length === 0) {
+                initBoard();
+            }
+            
             for (let row = 0; row < 8; row++) {
                 for (let col = 0; col < 8; col++) {
+                    if (!board[row] || !board[row][col]) {
+                        console.error(`Missing square at row ${row}, col ${col}`);
+                        continue;
+                    }
                     const square = board[row][col];
                     square.innerHTML = '';
+                    // Remove selection and valid move classes but keep checkerboard pattern
                     square.classList.remove('selected', 'valid-move', 'blue-move');
-                    square.className = `square ${(row + col) % 2 === 0 ? 'light' : 'dark'}`;
+                    // Reapply checkerboard pattern
+                    const isLight = (row + col) % 2 === 0;
+                    square.className = `square ${isLight ? 'light' : 'dark'}`;
                 }
             }
             
@@ -616,16 +658,23 @@
             
             if (selectedSquare) {
                 const [row, col] = selectedSquare;
-                const piece = getPieceAt(row, col);
-                const isWhite = piece && piece.color === 'white';
-                board[row][col].classList.add('selected');
-                validMoves.forEach(([r, c]) => {
-                    board[r][c].classList.add('valid-move');
-                    if (!isWhite) {
-                        board[r][c].classList.add('blue-move');
-                    }
-                });
+                if (board[row] && board[row][col]) {
+                    const piece = getPieceAt(row, col);
+                    const isWhite = piece && piece.color === 'white';
+                    board[row][col].classList.add('selected');
+                    validMoves.forEach(([r, c]) => {
+                        if (board[r] && board[r][c]) {
+                            board[r][c].classList.add('valid-move');
+                            if (!isWhite) {
+                                board[r][c].classList.add('blue-move');
+                            }
+                        }
+                    });
+                }
             }
+            
+            // Update turn indicator
+            updateStatus();
         }
         
         function drawPieces(color) {
@@ -706,7 +755,28 @@
         }
         
         function updateStatus(message) {
-            document.getElementById('statusMessage').textContent = message;
+            const statusEl = document.getElementById('statusMessage');
+            const turnIndicator = document.getElementById('turnIndicator');
+            
+            // Extract turn information and update indicator
+            if (gameState.gameOver) {
+                turnIndicator.textContent = gameState.winner.toUpperCase();
+                turnIndicator.className = 'turn-indicator ' + (gameState.winner === 'white' ? 'white-turn' : 'black-turn');
+                statusEl.textContent = 'Won the game!';
+            } else {
+                const isWhiteTurn = gameState.turnStep < 2;
+                turnIndicator.textContent = isWhiteTurn ? 'WHITE' : 'BLACK';
+                turnIndicator.className = 'turn-indicator ' + (isWhiteTurn ? 'white-turn' : 'black-turn');
+                
+                // Update message
+                if (message) {
+                    statusEl.textContent = message;
+                } else {
+                    const statusTexts = ['Select a Piece to Move!', 'Select a Destination!',
+                                       'Select a Piece to Move!', 'Select a Destination!'];
+                    statusEl.textContent = statusTexts[gameState.turnStep] || 'Game in progress';
+                }
+            }
         }
         
         // Socket event handlers
@@ -722,9 +792,10 @@
             document.getElementById('roomCodeDisplay').style.display = 'block';
             document.getElementById('menuScreen').classList.add('hidden');
             document.getElementById('gameScreen').classList.remove('hidden');
-            updateStatus('Waiting for opponent...');
             initializeGameState();
             initBoard();
+            updateBoardDisplay();
+            document.getElementById('statusMessage').textContent = 'Waiting for opponent...';
         });
         
         socket.on('joined_room', (data) => {
@@ -735,19 +806,20 @@
             document.getElementById('roomCodeDisplay').style.display = 'block';
             document.getElementById('menuScreen').classList.add('hidden');
             document.getElementById('gameScreen').classList.remove('hidden');
-            if (data.status === 'ready') {
-                updateStatus('Game starting!');
-            } else {
-                updateStatus('Waiting for opponent...');
-            }
             initializeGameState();
             initBoard();
+            updateBoardDisplay();
+            if (data.status === 'ready') {
+                document.getElementById('statusMessage').textContent = 'Game starting!';
+            } else {
+                document.getElementById('statusMessage').textContent = 'Waiting for opponent...';
+            }
         });
         
         socket.on('game_start', () => {
-            updateStatus('White: Select a Piece to Move!');
             initializeGameState();
             updateBoardDisplay();
+            updateStatus();
         });
         
         socket.on('opponent_move', (data) => {
@@ -768,9 +840,7 @@
             } else if (data.from_pos && data.to_pos) {
                 updateLocalMove(data.from_pos, data.to_pos);
             }
-            const statusText = ['White: Select a Piece to Move!', 'White: Select a Destination!',
-                               'Black: Select a Piece to Move!', 'Black: Select a Destination!'];
-            updateStatus(statusText[gameState.turnStep] || 'Game in progress');
+            updateStatus();
         });
         
         socket.on('game_state_update', (data) => {
