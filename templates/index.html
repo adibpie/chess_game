@@ -1148,6 +1148,8 @@
             const allMoves = [];
             const pieces = color === 'white' ? gameState.whitePieces : gameState.blackPieces;
             const locations = color === 'white' ? gameState.whiteLocations : gameState.blackLocations;
+            const tempSelected = selectedSquare;
+            const tempValidMoves = validMoves.slice();
             
             for (let i = 0; i < pieces.length; i++) {
                 const loc = locations[i];
@@ -1156,16 +1158,16 @@
                 const col = loc[0];
                 
                 // Temporarily set selectedSquare to get valid moves for this piece
-                const tempSelected = selectedSquare;
                 selectedSquare = [row, col];
                 updateValidMoves(row, col);
                 
                 validMoves.forEach(move => {
                     allMoves.push([move[1], move[0]]); // Convert [row, col] to [col, row]
                 });
-                
-                selectedSquare = tempSelected;
             }
+            
+            selectedSquare = tempSelected;
+            validMoves = tempValidMoves;
             
             return allMoves;
         }
@@ -1176,6 +1178,8 @@
             const checkedColor = gameState.checkedKing.color;
             const pieces = checkedColor === 'white' ? gameState.whitePieces : gameState.blackPieces;
             const locations = checkedColor === 'white' ? gameState.whiteLocations : gameState.blackLocations;
+            const tempSelected = selectedSquare;
+            const tempValidMoves = validMoves.slice();
             
             // Check if any piece can make a move
             for (let i = 0; i < pieces.length; i++) {
@@ -1184,18 +1188,19 @@
                 const row = loc[1];
                 const col = loc[0];
                 
-                const tempSelected = selectedSquare;
                 selectedSquare = [row, col];
                 updateValidMoves(row, col);
                 
                 // If there are any valid moves, not checkmate (simplified check)
                 if (validMoves.length > 0) {
                     selectedSquare = tempSelected;
+                    validMoves = tempValidMoves;
                     return false; // Has moves available
                 }
-                
-                selectedSquare = tempSelected;
             }
+            
+            selectedSquare = tempSelected;
+            validMoves = tempValidMoves;
             
             // No moves available = checkmate
             return true;
