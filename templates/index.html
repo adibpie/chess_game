@@ -10,10 +10,11 @@
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+            font-family: 'Courier New', monospace;
         }
         
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Courier New', monospace;
             background: darkgray;
             display: flex;
             justify-content: center;
@@ -562,6 +563,8 @@
             whiteLocations: [],
             blackPieces: [],
             blackLocations: [],
+            whiteMoved: [],
+            blackMoved: [],
             capturedPiecesWhite: [],
             capturedPiecesBlack: [],
             turnStep: 0,
@@ -793,118 +796,388 @@
             }
             return null;
         }
-        
-        function updateValidMoves(row, col) {
-            validMoves = [];
-            const piece = getPieceAt(row, col);
-            if (!piece) return;
-            
+
+        function cloneLocations(locations) {
+            return locations.map(loc => [loc[0], loc[1]]);
+        }
+
+        function getPieceAtState(state, row, col) {
+            for (let i = 0; i < state.whiteLocations.length; i++) {
+                const loc = state.whiteLocations[i];
+                if (loc[0] === col && loc[1] === row) {
+                    return { color: 'white', type: state.whitePieces[i], index: i };
+                }
+            }
+            for (let i = 0; i < state.blackLocations.length; i++) {
+                const loc = state.blackLocations[i];
+                if (loc[0] === col && loc[1] === row) {
+                    return { color: 'black', type: state.blackPieces[i], index: i };
+                }
+            }
+            return null;
+        }
+
+        function buildMovedArraysFromPositions(state, color) {
+            const pieces = color === 'white' ? state.whitePieces : state.blackPieces;
+            const locations = color === 'white' ? state.whiteLocations : state.blackLocations;
+            const moved = pieces.map(() => false);
+            const kingIndex = pieces.indexOf('king');
+            const kingStart = color === 'white' ? [3, 0] : [3, 7];
+            if (kingIndex !== -1) {
+                const kingLoc = locations[kingIndex];
+                if (kingLoc[0] !== kingStart[0] || kingLoc[1] !== kingStart[1]) {
+                    moved[kingIndex] = true;
+                }
+            }
+            for (let i = 0; i < pieces.length; i++) {
+                if (pieces[i] !== 'rook') continue;
+                const rookLoc = locations[i];
+                const rookRow = color === 'white' ? 0 : 7;
+                const isOnStart = (rookLoc[0] === 0 && rookLoc[1] === rookRow) ||
+                                  (rookLoc[0] === 7 && rookLoc[1] === rookRow);
+                if (!isOnStart) {
+                    moved[i] = true;
+                }
+            }
+            return moved;
+        }
+
+        function ensureMovedArrays() {
+            if (!Array.isArray(gameState.whiteMoved) || gameState.whiteMoved.length !== gameState.whitePieces.length) {
+                gameState.whiteMoved = buildMovedArraysFromPositions(gameState, 'white');
+            }
+            if (!Array.isArray(gameState.blackMoved) || gameState.blackMoved.length !== gameState.blackPieces.length) {
+                gameState.blackMoved = buildMovedArraysFromPositions(gameState, 'black');
+            }
+        }
+
+        function cloneGameState(state) {
+            return {
+                whitePieces: state.whitePieces.slice(),
+                whiteLocations: cloneLocations(state.whiteLocations),
+                blackPieces: state.blackPieces.slice(),
+                blackLocations: cloneLocations(state.blackLocations),
+                whiteMoved: Array.isArray(state.whiteMoved) ? state.whiteMoved.slice() : [],
+                blackMoved: Array.isArray(state.blackMoved) ? state.blackMoved.slice() : [],
+                whiteEp: state.whiteEp ? state.whiteEp.slice() : [100, 100],
+                blackEp: state.blackEp ? state.blackEp.slice() : [100, 100]
+            };
+        }
+
+        function getPseudoMovesForPiece(state, row, col, forAttack = false) {
+            const moves = [];
+            const piece = getPieceAtState(state, row, col);
+            if (!piece) return moves;
+            const direction = piece.color === 'white' ? 1 : -1;
+
             if (piece.type === 'pawn') {
-                if (piece.color === 'white') {
-                    // Forward move (one square)
-                    if (row + 1 < 8 && !getPieceAt(row + 1, col)) {
-                        validMoves.push([row + 1, col]);
-                        // Double move from starting position (row 1)
-                        if (row === 1 && !getPieceAt(row + 2, col)) {
-                            validMoves.push([row + 2, col]);
+                const nextRow = row + direction;
+                if (forAttack) {
+                    if (nextRow >= 0 && nextRow < 8) {
+                        if (col + 1 < 8) moves.push([nextRow, col + 1]);
+                        if (col - 1 >= 0) moves.push([nextRow, col - 1]);
+                    }
+                    return moves;
+                }
+
+                if (nextRow >= 0 && nextRow < 8 && !getPieceAtState(state, nextRow, col)) {
+                    moves.push([nextRow, col]);
+                    const startRow = piece.color === 'white' ? 1 : 6;
+                    const twoRow = row + direction * 2;
+                    if (row === startRow && !getPieceAtState(state, twoRow, col)) {
+                        moves.push([twoRow, col]);
+                    }
+                }
+
+                const diagRow = row + direction;
+                if (diagRow >= 0 && diagRow < 8) {
+                    const rightCol = col + 1;
+                    const leftCol = col - 1;
+                    if (rightCol < 8) {
+                        const target = getPieceAtState(state, diagRow, rightCol);
+                        if (target && target.color !== piece.color) {
+                            moves.push([diagRow, rightCol]);
+                        }
+                        const ep = piece.color === 'white' ? state.blackEp : state.whiteEp;
+                        if (ep && ep[0] === rightCol && ep[1] === diagRow) {
+                            moves.push([diagRow, rightCol]);
                         }
                     }
-                    // Diagonal captures (right)
-                    if (col + 1 < 8 && row + 1 < 8) {
-                        const targetPiece = getPieceAt(row + 1, col + 1);
-                        if (targetPiece && targetPiece.color === 'black') {
-                            validMoves.push([row + 1, col + 1]);
+                    if (leftCol >= 0) {
+                        const target = getPieceAtState(state, diagRow, leftCol);
+                        if (target && target.color !== piece.color) {
+                            moves.push([diagRow, leftCol]);
                         }
-                        // En passant (right)
-                        if (gameState.blackEp[0] === col + 1 && gameState.blackEp[1] === row + 1) {
-                            validMoves.push([row + 1, col + 1]);
-                        }
-                    }
-                    // Diagonal captures (left)
-                    if (col - 1 >= 0 && row + 1 < 8) {
-                        const targetPiece = getPieceAt(row + 1, col - 1);
-                        if (targetPiece && targetPiece.color === 'black') {
-                            validMoves.push([row + 1, col - 1]);
-                        }
-                        // En passant (left)
-                        if (gameState.blackEp[0] === col - 1 && gameState.blackEp[1] === row + 1) {
-                            validMoves.push([row + 1, col - 1]);
-                        }
-                    }
-                } else { // black
-                    // Forward move (one square)
-                    if (row - 1 >= 0 && !getPieceAt(row - 1, col)) {
-                        validMoves.push([row - 1, col]);
-                        // Double move from starting position (row 6)
-                        if (row === 6 && !getPieceAt(row - 2, col)) {
-                            validMoves.push([row - 2, col]);
-                        }
-                    }
-                    // Diagonal captures (right)
-                    if (col + 1 < 8 && row - 1 >= 0) {
-                        const targetPiece = getPieceAt(row - 1, col + 1);
-                        if (targetPiece && targetPiece.color === 'white') {
-                            validMoves.push([row - 1, col + 1]);
-                        }
-                        // En passant (right)
-                        if (gameState.whiteEp[0] === col + 1 && gameState.whiteEp[1] === row - 1) {
-                            validMoves.push([row - 1, col + 1]);
-                        }
-                    }
-                    // Diagonal captures (left)
-                    if (col - 1 >= 0 && row - 1 >= 0) {
-                        const targetPiece = getPieceAt(row - 1, col - 1);
-                        if (targetPiece && targetPiece.color === 'white') {
-                            validMoves.push([row - 1, col - 1]);
-                        }
-                        // En passant (left)
-                        if (gameState.whiteEp[0] === col - 1 && gameState.whiteEp[1] === row - 1) {
-                            validMoves.push([row - 1, col - 1]);
+                        const ep = piece.color === 'white' ? state.blackEp : state.whiteEp;
+                        if (ep && ep[0] === leftCol && ep[1] === diagRow) {
+                            moves.push([diagRow, leftCol]);
                         }
                     }
                 }
-            } else {
-                // Other pieces
-                const directions = {
-                    'rook': [[0, 1], [0, -1], [1, 0], [-1, 0]],
-                    'knight': [[1, 2], [2, 1], [-1, 2], [2, -1], [1, -2], [-2, 1], [-1, -2], [-2, -1]],
-                    'bishop': [[1, 1], [1, -1], [-1, 1], [-1, -1]],
-                    'queen': [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]],
-                    'king': [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]]
-                };
-                
-                const moves = directions[piece.type] || [];
-                const isSliding = ['rook', 'bishop', 'queen'].includes(piece.type);
-                
-                for (const [dx, dy] of moves) {
-                    if (isSliding) {
-                        for (let dist = 1; dist < 8; dist++) {
-                            const newRow = row + dy * dist;
-                            const newCol = col + dx * dist;
-                            if (newRow < 0 || newRow >= 8 || newCol < 0 || newCol >= 8) break;
-                            
-                            const targetPiece = getPieceAt(newRow, newCol);
-                            if (!targetPiece) {
-                                validMoves.push([newRow, newCol]);
-                            } else {
-                                if (targetPiece.color !== piece.color) {
-                                    validMoves.push([newRow, newCol]);
-                                }
-                                break;
+
+                return moves;
+            }
+
+            const directions = {
+                'rook': [[0, 1], [0, -1], [1, 0], [-1, 0]],
+                'knight': [[1, 2], [2, 1], [-1, 2], [2, -1], [1, -2], [-2, 1], [-1, -2], [-2, -1]],
+                'bishop': [[1, 1], [1, -1], [-1, 1], [-1, -1]],
+                'queen': [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]],
+                'king': [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]]
+            };
+
+            const movesList = directions[piece.type] || [];
+            const isSliding = ['rook', 'bishop', 'queen'].includes(piece.type);
+
+            for (const [dx, dy] of movesList) {
+                if (isSliding) {
+                    for (let dist = 1; dist < 8; dist++) {
+                        const newRow = row + dy * dist;
+                        const newCol = col + dx * dist;
+                        if (newRow < 0 || newRow >= 8 || newCol < 0 || newCol >= 8) break;
+                        const targetPiece = getPieceAtState(state, newRow, newCol);
+                        if (!targetPiece) {
+                            moves.push([newRow, newCol]);
+                        } else {
+                            if (targetPiece.color !== piece.color) {
+                                moves.push([newRow, newCol]);
                             }
+                            break;
                         }
-                    } else {
-                        const newRow = row + dy;
-                        const newCol = col + dx;
-                        if (newRow >= 0 && newRow < 8 && newCol >= 0 && newCol < 8) {
-                            const targetPiece = getPieceAt(newRow, newCol);
-                            if (!targetPiece || targetPiece.color !== piece.color) {
-                                validMoves.push([newRow, newCol]);
-                            }
+                    }
+                } else {
+                    const newRow = row + dy;
+                    const newCol = col + dx;
+                    if (newRow >= 0 && newRow < 8 && newCol >= 0 && newCol < 8) {
+                        const targetPiece = getPieceAtState(state, newRow, newCol);
+                        if (!targetPiece || targetPiece.color !== piece.color) {
+                            moves.push([newRow, newCol]);
                         }
                     }
                 }
             }
+
+            return moves;
+        }
+
+        function isSquareAttacked(state, row, col, byColor) {
+            const pieces = byColor === 'white' ? state.whitePieces : state.blackPieces;
+            const locations = byColor === 'white' ? state.whiteLocations : state.blackLocations;
+            const direction = byColor === 'white' ? 1 : -1;
+
+            for (let i = 0; i < pieces.length; i++) {
+                const piece = pieces[i];
+                const loc = locations[i];
+                if (!loc || loc.length < 2) continue;
+                const pRow = loc[1];
+                const pCol = loc[0];
+
+                if (piece === 'pawn') {
+                    const attackRow = pRow + direction;
+                    if (attackRow === row && (pCol + 1 === col || pCol - 1 === col)) {
+                        return true;
+                    }
+                    continue;
+                }
+
+                if (piece === 'knight') {
+                    const moves = [[1, 2], [2, 1], [-1, 2], [2, -1], [1, -2], [-2, 1], [-1, -2], [-2, -1]];
+                    for (const [dx, dy] of moves) {
+                        if (pRow + dy === row && pCol + dx === col) {
+                            return true;
+                        }
+                    }
+                    continue;
+                }
+
+                if (piece === 'king') {
+                    const moves = [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+                    for (const [dx, dy] of moves) {
+                        if (pRow + dy === row && pCol + dx === col) {
+                            return true;
+                        }
+                    }
+                    continue;
+                }
+
+                const directions = {
+                    'rook': [[0, 1], [0, -1], [1, 0], [-1, 0]],
+                    'bishop': [[1, 1], [1, -1], [-1, 1], [-1, -1]],
+                    'queen': [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]]
+                };
+                const rays = directions[piece] || [];
+                for (const [dx, dy] of rays) {
+                    for (let dist = 1; dist < 8; dist++) {
+                        const newRow = pRow + dy * dist;
+                        const newCol = pCol + dx * dist;
+                        if (newRow < 0 || newRow >= 8 || newCol < 0 || newCol >= 8) break;
+                        if (newRow === row && newCol === col) {
+                            const occupied = getPieceAtState(state, newRow, newCol);
+                            if (!occupied || occupied.color !== byColor) {
+                                return true;
+                            }
+                            break;
+                        }
+                        if (getPieceAtState(state, newRow, newCol)) {
+                            break;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+
+        function isKingInCheck(state, color) {
+            const pieces = color === 'white' ? state.whitePieces : state.blackPieces;
+            const locations = color === 'white' ? state.whiteLocations : state.blackLocations;
+            const kingIndex = pieces.indexOf('king');
+            if (kingIndex === -1) return false;
+            const kingLoc = locations[kingIndex];
+            const opponent = color === 'white' ? 'black' : 'white';
+            return isSquareAttacked(state, kingLoc[1], kingLoc[0], opponent);
+        }
+
+        function applyMoveToState(state, fromRow, fromCol, toRow, toCol) {
+            const piece = getPieceAtState(state, fromRow, fromCol);
+            if (!piece) return;
+            const isWhite = piece.color === 'white';
+            const pieces = isWhite ? state.whitePieces : state.blackPieces;
+            const locations = isWhite ? state.whiteLocations : state.blackLocations;
+            const moved = isWhite ? state.whiteMoved : state.blackMoved;
+            const oppPieces = isWhite ? state.blackPieces : state.whitePieces;
+            const oppLocations = isWhite ? state.blackLocations : state.whiteLocations;
+            const oppMoved = isWhite ? state.blackMoved : state.whiteMoved;
+
+            let isEnPassant = false;
+            if (piece.type === 'pawn') {
+                const epTarget = isWhite ? state.blackEp : state.whiteEp;
+                if (epTarget && epTarget[0] === toCol && epTarget[1] === toRow) {
+                    isEnPassant = true;
+                }
+            }
+
+            if (isEnPassant) {
+                const pawnRow = isWhite ? toRow - 1 : toRow + 1;
+                for (let j = oppLocations.length - 1; j >= 0; j--) {
+                    const oppLoc = oppLocations[j];
+                    if (oppLoc[0] === toCol && oppLoc[1] === pawnRow) {
+                        oppPieces.splice(j, 1);
+                        oppLocations.splice(j, 1);
+                        if (Array.isArray(oppMoved)) {
+                            oppMoved.splice(j, 1);
+                        }
+                        break;
+                    }
+                }
+            } else {
+                for (let j = oppLocations.length - 1; j >= 0; j--) {
+                    const oppLoc = oppLocations[j];
+                    if (oppLoc[0] === toCol && oppLoc[1] === toRow) {
+                        oppPieces.splice(j, 1);
+                        oppLocations.splice(j, 1);
+                        if (Array.isArray(oppMoved)) {
+                            oppMoved.splice(j, 1);
+                        }
+                        break;
+                    }
+                }
+            }
+
+            locations[piece.index] = [toCol, toRow];
+            if (Array.isArray(moved) && moved.length > piece.index) {
+                moved[piece.index] = true;
+            }
+
+            if (piece.type === 'king' && Math.abs(fromCol - toCol) === 2) {
+                const rookFromCol = toCol > fromCol ? 7 : 0;
+                const rookToCol = toCol > fromCol ? fromCol + 1 : fromCol - 1;
+                const rookIndex = locations.findIndex(loc => loc[0] === rookFromCol && loc[1] === fromRow);
+                if (rookIndex !== -1) {
+                    locations[rookIndex] = [rookToCol, fromRow];
+                    if (Array.isArray(moved) && moved.length > rookIndex) {
+                        moved[rookIndex] = true;
+                    }
+                }
+            }
+        }
+
+        function isMoveLegal(state, fromRow, fromCol, toRow, toCol, color) {
+            const tempState = cloneGameState(state);
+            applyMoveToState(tempState, fromRow, fromCol, toRow, toCol);
+            return !isKingInCheck(tempState, color);
+        }
+
+        function getCastlingMoves(state, color) {
+            const moves = [];
+            const pieces = color === 'white' ? state.whitePieces : state.blackPieces;
+            const locations = color === 'white' ? state.whiteLocations : state.blackLocations;
+            const moved = color === 'white' ? state.whiteMoved : state.blackMoved;
+            const kingIndex = pieces.indexOf('king');
+            if (kingIndex === -1) return moves;
+            if (Array.isArray(moved) && moved[kingIndex]) return moves;
+            const kingLoc = locations[kingIndex];
+            const kingRow = kingLoc[1];
+            const kingCol = kingLoc[0];
+            if (isKingInCheck(state, color)) return moves;
+            const opponent = color === 'white' ? 'black' : 'white';
+
+            for (let i = 0; i < pieces.length; i++) {
+                if (pieces[i] !== 'rook') continue;
+                if (Array.isArray(moved) && moved[i]) continue;
+                const rookLoc = locations[i];
+                if (rookLoc[1] !== kingRow) continue;
+                if (rookLoc[0] !== 0 && rookLoc[0] !== 7) continue;
+                const dir = rookLoc[0] > kingCol ? 1 : -1;
+                let clear = true;
+                for (let c = kingCol + dir; c !== rookLoc[0]; c += dir) {
+                    if (getPieceAtState(state, kingRow, c)) {
+                        clear = false;
+                        break;
+                    }
+                }
+                if (!clear) continue;
+
+                const passSquares = [
+                    [kingRow, kingCol + dir],
+                    [kingRow, kingCol + dir * 2]
+                ];
+                let safe = true;
+                for (const [r, c] of passSquares) {
+                    if (isSquareAttacked(state, r, c, opponent)) {
+                        safe = false;
+                        break;
+                    }
+                }
+                if (!safe) continue;
+                moves.push([kingRow, kingCol + dir * 2]);
+            }
+            return moves;
+        }
+
+        function getLegalMovesForPiece(row, col) {
+            const piece = getPieceAt(row, col);
+            if (!piece) return [];
+            ensureMovedArrays();
+            const pseudoMoves = getPseudoMovesForPiece(gameState, row, col);
+            const legalMoves = [];
+            for (const [r, c] of pseudoMoves) {
+                if (isMoveLegal(gameState, row, col, r, c, piece.color)) {
+                    legalMoves.push([r, c]);
+                }
+            }
+            if (piece.type === 'king') {
+                const castles = getCastlingMoves(gameState, piece.color);
+                for (const move of castles) {
+                    if (isMoveLegal(gameState, row, col, move[0], move[1], piece.color)) {
+                        legalMoves.push(move);
+                    }
+                }
+            }
+            return legalMoves;
+        }
+        
+        function updateValidMoves(row, col) {
+            validMoves = getLegalMovesForPiece(row, col);
         }
         
         function makeMove(fromRow, fromCol, toRow, toCol) {
@@ -935,6 +1208,7 @@
             const [fromCol, fromRow] = fromPos;
             const [toCol, toRow] = toPos;
             const isWhiteTurn = gameState.turnStep < 2;
+            ensureMovedArrays();
             
             // Handle en passant capture
             if (isEnPassant) {
@@ -947,6 +1221,7 @@
                             gameState.capturedPiecesWhite.push(gameState.blackPieces[j]);
                             gameState.blackPieces.splice(j, 1);
                             gameState.blackLocations.splice(j, 1);
+                            gameState.blackMoved.splice(j, 1);
                             break;
                         }
                     }
@@ -959,6 +1234,7 @@
                             gameState.capturedPiecesBlack.push(gameState.whitePieces[j]);
                             gameState.whitePieces.splice(j, 1);
                             gameState.whiteLocations.splice(j, 1);
+                            gameState.whiteMoved.splice(j, 1);
                             break;
                         }
                     }
@@ -970,7 +1246,9 @@
                     const loc = gameState.whiteLocations[i];
                     if (loc[0] === fromCol && loc[1] === fromRow) {
                         const pieceType = gameState.whitePieces[i];
+                        const isCastling = pieceType === 'king' && Math.abs(fromCol - toCol) === 2;
                         gameState.whiteLocations[i] = [toCol, toRow];
+                        gameState.whiteMoved[i] = true;
                         
                         // Check for normal capture (if not en passant)
                         if (!isEnPassant) {
@@ -984,8 +1262,19 @@
                                     }
                                     gameState.blackPieces.splice(j, 1);
                                     gameState.blackLocations.splice(j, 1);
+                                    gameState.blackMoved.splice(j, 1);
                                     break;
                                 }
+                            }
+                        }
+
+                        if (isCastling) {
+                            const rookFromCol = toCol > fromCol ? 7 : 0;
+                            const rookToCol = toCol > fromCol ? fromCol + 1 : fromCol - 1;
+                            const rookIndex = gameState.whiteLocations.findIndex(r => r[0] === rookFromCol && r[1] === fromRow);
+                            if (rookIndex !== -1) {
+                                gameState.whiteLocations[rookIndex] = [rookToCol, fromRow];
+                                gameState.whiteMoved[rookIndex] = true;
                             }
                         }
                         
@@ -1016,7 +1305,9 @@
                     const loc = gameState.blackLocations[i];
                     if (loc[0] === fromCol && loc[1] === fromRow) {
                         const pieceType = gameState.blackPieces[i];
+                        const isCastling = pieceType === 'king' && Math.abs(fromCol - toCol) === 2;
                         gameState.blackLocations[i] = [toCol, toRow];
+                        gameState.blackMoved[i] = true;
                         
                         // Check for normal capture (if not en passant)
                         if (!isEnPassant) {
@@ -1030,8 +1321,19 @@
                                     }
                                     gameState.whitePieces.splice(j, 1);
                                     gameState.whiteLocations.splice(j, 1);
+                                    gameState.whiteMoved.splice(j, 1);
                                     break;
                                 }
+                            }
+                        }
+
+                        if (isCastling) {
+                            const rookFromCol = toCol > fromCol ? 7 : 0;
+                            const rookToCol = toCol > fromCol ? fromCol + 1 : fromCol - 1;
+                            const rookIndex = gameState.blackLocations.findIndex(r => r[0] === rookFromCol && r[1] === fromRow);
+                            if (rookIndex !== -1) {
+                                gameState.blackLocations[rookIndex] = [rookToCol, fromRow];
+                                gameState.blackMoved[rookIndex] = true;
                             }
                         }
                         
@@ -1123,9 +1425,7 @@
             const whiteKingIndex = gameState.whitePieces.indexOf('king');
             if (whiteKingIndex !== -1) {
                 const whiteKingLoc = gameState.whiteLocations[whiteKingIndex];
-                // Get all black piece moves
-                const blackMoves = getAllValidMoves('black');
-                if (blackMoves.some(move => move[0] === whiteKingLoc[0] && move[1] === whiteKingLoc[1])) {
+                if (isSquareAttacked(gameState, whiteKingLoc[1], whiteKingLoc[0], 'black')) {
                     gameState.inCheck = true;
                     gameState.checkedKing = { color: 'white', location: whiteKingLoc };
                 }
@@ -1135,9 +1435,7 @@
             const blackKingIndex = gameState.blackPieces.indexOf('king');
             if (blackKingIndex !== -1) {
                 const blackKingLoc = gameState.blackLocations[blackKingIndex];
-                // Get all white piece moves
-                const whiteMoves = getAllValidMoves('white');
-                if (whiteMoves.some(move => move[0] === blackKingLoc[0] && move[1] === blackKingLoc[1])) {
+                if (isSquareAttacked(gameState, blackKingLoc[1], blackKingLoc[0], 'white')) {
                     gameState.inCheck = true;
                     gameState.checkedKing = { color: 'black', location: blackKingLoc };
                 }
@@ -1178,8 +1476,6 @@
             const checkedColor = gameState.checkedKing.color;
             const pieces = checkedColor === 'white' ? gameState.whitePieces : gameState.blackPieces;
             const locations = checkedColor === 'white' ? gameState.whiteLocations : gameState.blackLocations;
-            const tempSelected = selectedSquare;
-            const tempValidMoves = validMoves.slice();
             
             // Check if any piece can make a move
             for (let i = 0; i < pieces.length; i++) {
@@ -1188,19 +1484,11 @@
                 const row = loc[1];
                 const col = loc[0];
                 
-                selectedSquare = [row, col];
-                updateValidMoves(row, col);
-                
-                // If there are any valid moves, not checkmate (simplified check)
-                if (validMoves.length > 0) {
-                    selectedSquare = tempSelected;
-                    validMoves = tempValidMoves;
+                const moves = getLegalMovesForPiece(row, col);
+                if (moves.length > 0) {
                     return false; // Has moves available
                 }
             }
-            
-            selectedSquare = tempSelected;
-            validMoves = tempValidMoves;
             
             // No moves available = checkmate
             return true;
@@ -1366,6 +1654,8 @@
                              'pawn', 'pawn', 'pawn', 'pawn', 'pawn', 'pawn', 'pawn', 'pawn'],
                 blackLocations: [[0,7], [1,7], [2,7], [3,7], [4,7], [5,7], [6,7], [7,7],
                                [0,6], [1,6], [2,6], [3,6], [4,6], [5,6], [6,6], [7,6]],
+                whiteMoved: new Array(16).fill(false),
+                blackMoved: new Array(16).fill(false),
                 capturedPiecesWhite: [],
                 capturedPiecesBlack: [],
                 turnStep: 0,
@@ -1460,6 +1750,9 @@
                 gameState.winner = gs.winner || gameState.winner;
                 gameState.whiteEp = gs.whiteEp || gs.white_ep || gameState.whiteEp || [100, 100];
                 gameState.blackEp = gs.blackEp || gs.black_ep || gameState.blackEp || [100, 100];
+                gameState.whiteMoved = gs.whiteMoved || gs.white_moved || gameState.whiteMoved;
+                gameState.blackMoved = gs.blackMoved || gs.black_moved || gameState.blackMoved;
+                ensureMovedArrays();
                 updateBoardDisplay();
                 updateCapturedPieces();
             } else if (data.from_pos && data.to_pos) {
@@ -1482,6 +1775,9 @@
                 gameState.winner = gs.winner || gameState.winner;
                 gameState.whiteEp = gs.whiteEp || gs.white_ep || gameState.whiteEp || [100, 100];
                 gameState.blackEp = gs.blackEp || gs.black_ep || gameState.blackEp || [100, 100];
+                gameState.whiteMoved = gs.whiteMoved || gs.white_moved || gameState.whiteMoved;
+                gameState.blackMoved = gs.blackMoved || gs.black_moved || gameState.blackMoved;
+                ensureMovedArrays();
                 updateBoardDisplay();
                 updateCapturedPieces();
             }
@@ -1510,6 +1806,9 @@
                 gameState.blackPieces = gs.blackPieces || gs.black_pieces || gameState.blackPieces;
                 gameState.whiteLocations = (gs.whiteLocations || gs.white_locations || gameState.whiteLocations).map(loc => Array.isArray(loc) ? loc : [loc[0], loc[1]]);
                 gameState.blackLocations = (gs.blackLocations || gs.black_locations || gameState.blackLocations).map(loc => Array.isArray(loc) ? loc : [loc[0], loc[1]]);
+                gameState.whiteMoved = gs.whiteMoved || gs.white_moved || gameState.whiteMoved;
+                gameState.blackMoved = gs.blackMoved || gs.black_moved || gameState.blackMoved;
+                ensureMovedArrays();
                 updateBoardDisplay();
             }
         });
