@@ -1007,6 +1007,29 @@
             }
         }
 
+        function updateBoardLabels() {
+            const perspective = currentMode === 'online' && playerColor ? playerColor
+                : (gameState.turnStep < 2 ? 'white' : 'black');
+            const files = perspective === 'white'
+                ? ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
+                : ['h', 'g', 'f', 'e', 'd', 'c', 'b', 'a'];
+            const ranks = perspective === 'white'
+                ? ['8', '7', '6', '5', '4', '3', '2', '1']
+                : ['1', '2', '3', '4', '5', '6', '7', '8'];
+
+            const topFiles = document.querySelectorAll('.file-labels.top span');
+            const bottomFiles = document.querySelectorAll('.file-labels.bottom span');
+            const leftRanks = document.querySelectorAll('.rank-labels.left span');
+            const rightRanks = document.querySelectorAll('.rank-labels.right span');
+
+            for (let i = 0; i < 8; i++) {
+                if (topFiles[i]) topFiles[i].textContent = files[i];
+                if (bottomFiles[i]) bottomFiles[i].textContent = files[i];
+                if (leftRanks[i]) leftRanks[i].textContent = ranks[i];
+                if (rightRanks[i]) rightRanks[i].textContent = ranks[i];
+            }
+        }
+
         function showUndoPrompt(onDone) {
             pendingUndoCallback = onDone || null;
             const modal = document.getElementById('undoModal');
@@ -1895,6 +1918,8 @@
                     });
                 }
             }
+
+            updateBoardLabels();
         }
         
         function drawPieces(color) {
