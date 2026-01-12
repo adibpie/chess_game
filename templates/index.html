@@ -39,6 +39,57 @@
             flex-shrink: 0;
             max-width: 100%;
         }
+
+        .board-labels {
+            position: absolute;
+            width: 800px;
+            height: 800px;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            z-index: 200;
+        }
+
+        .file-labels {
+            position: absolute;
+            left: 0;
+            width: 800px;
+            height: 20px;
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            text-align: center;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        .file-labels.top {
+            top: -24px;
+        }
+
+        .file-labels.bottom {
+            bottom: -24px;
+        }
+
+        .rank-labels {
+            position: absolute;
+            top: 0;
+            width: 20px;
+            height: 800px;
+            display: grid;
+            grid-template-rows: repeat(8, 1fr);
+            align-items: center;
+            text-align: center;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        .rank-labels.left {
+            left: -24px;
+        }
+
+        .rank-labels.right {
+            right: -24px;
+        }
         
         .game-board {
             display: grid;
@@ -590,6 +641,20 @@
         <div class="game-container">
             <div class="board-container">
                 <div id="gameBoard" class="game-board"></div>
+                <div class="board-labels">
+                    <div class="file-labels top">
+                        <span>a</span><span>b</span><span>c</span><span>d</span><span>e</span><span>f</span><span>g</span><span>h</span>
+                    </div>
+                    <div class="file-labels bottom">
+                        <span>a</span><span>b</span><span>c</span><span>d</span><span>e</span><span>f</span><span>g</span><span>h</span>
+                    </div>
+                    <div class="rank-labels left">
+                        <span>8</span><span>7</span><span>6</span><span>5</span><span>4</span><span>3</span><span>2</span><span>1</span>
+                    </div>
+                    <div class="rank-labels right">
+                        <span>8</span><span>7</span><span>6</span><span>5</span><span>4</span><span>3</span><span>2</span><span>1</span>
+                    </div>
+                </div>
                 <div class="status-bar">
                     <span id="turnIndicator" class="turn-indicator white-turn">WHITE</span>
                     <span id="statusMessage">Select a Piece to Move!</span>
