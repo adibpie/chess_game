@@ -43,7 +43,8 @@ def create_room():
         'players': [],
         'game_state': None,
         'created_at': datetime.now(),
-        'player_colors': {}  # socket_id -> 'white' or 'black'
+        'player_colors': {},  # socket_id -> 'white' or 'black'
+        'undo_enabled': False
     }
     return jsonify({'room_code': room_code, 'invite_link': f'/play/{room_code}'})
 
@@ -112,14 +113,16 @@ def handle_join_room(data):
             emit('joined_room', {
                 'room_code': room_code,
                 'color': 'white',
-                'status': 'waiting'
+                'status': 'waiting',
+                'undo_enabled': room.get('undo_enabled', False)
             })
         else:
             room['player_colors'][request.sid] = 'black'
             emit('joined_room', {
                 'room_code': room_code,
                 'color': 'black',
-                'status': 'ready'
+                'status': 'ready',
+                'undo_enabled': room.get('undo_enabled', False)
             })
             # Notify first player that game can start
             for player_id in room['players']:
@@ -130,6 +133,7 @@ def handle_join_room(data):
                     }, room=player_id)
                     emit('game_start', {'message': 'Game starting!'}, room=player_id)
             emit('game_start', {'message': 'Game starting!'})
+    emit('undo_setting', {'enabled': room.get('undo_enabled', False)}, room=room_code)
 
 @socketio.on('create_room')
 def handle_create_room():
@@ -139,13 +143,15 @@ def handle_create_room():
         'players': [request.sid],
         'game_state': None,
         'created_at': datetime.now(),
-        'player_colors': {request.sid: 'white'}
+        'player_colors': {request.sid: 'white'},
+        'undo_enabled': False
     }
     join_room(room_code)
     emit('room_created', {
         'room_code': room_code,
         'invite_link': f'/play/{room_code}',
-        'color': 'white'
+        'color': 'white',
+        'undo_enabled': rooms[room_code]['undo_enabled']
     })
 
 @socketio.on('make_move')
@@ -220,6 +226,36 @@ def handle_update_state(data):
             emit('game_state_update', {
                 'game_state': game_state
             }, room=player_id)
+
+@socketio.on('undo_preference')
+def handle_undo_preference(data):
+    """Handle undo preference from a player"""
+    room_code = data.get('room_code')
+    enabled = bool(data.get('enabled'))
+    
+    if room_code not in rooms:
+        return
+    
+    room = rooms[room_code]
+    if enabled:
+        room['undo_enabled'] = True
+    emit('undo_setting', {'enabled': room.get('undo_enabled', False)}, room=room_code)
+
+@socketio.on('undo_move')
+def handle_undo_move(data):
+    """Handle undoing the last move"""
+    room_code = data.get('room_code')
+    snapshot = data.get('snapshot')
+    
+    if room_code not in rooms:
+        return
+    
+    room = rooms[room_code]
+    if request.sid not in room['players']:
+        return
+    
+    room['game_state'] = snapshot
+    emit('undo_move', {'snapshot': snapshot}, room=room_code, include_self=False)
 
 @socketio.on('forfeit')
 def handle_forfeit(data):

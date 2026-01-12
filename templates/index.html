@@ -134,11 +134,88 @@
             flex-direction: column;
             gap: 5px;
         }
-        
+
         .captured-piece-img {
             width: 45px;
             height: 45px;
             object-fit: contain;
+        }
+
+        .last-move-section {
+            margin-top: auto;
+            padding-top: 10px;
+            border-top: 2px solid black;
+        }
+
+        .last-move-item {
+            font-size: 14px;
+            margin-top: 6px;
+            word-break: break-word;
+        }
+
+        .undo-button {
+            margin-top: 12px;
+            padding: 8px 10px;
+            background: #111;
+            color: #fff;
+            border: 2px solid #000;
+            cursor: pointer;
+            font-size: 14px;
+            display: none;
+            text-align: center;
+        }
+
+        .undo-button:hover {
+            background: #333;
+        }
+
+        .undo-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 3000;
+        }
+
+        .undo-modal.hidden {
+            display: none;
+        }
+
+        .undo-modal-content {
+            background: gold;
+            border: 4px solid black;
+            padding: 20px;
+            width: 380px;
+            text-align: center;
+        }
+
+        .undo-modal-title {
+            font-size: 22px;
+            margin-bottom: 10px;
+        }
+
+        .undo-modal-text {
+            font-size: 14px;
+            margin-bottom: 16px;
+        }
+
+        .undo-modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .undo-modal-button {
+            padding: 8px 16px;
+            border: 2px solid black;
+            background: white;
+            cursor: pointer;
+            font-size: 14px;
         }
         
         .status-bar {
@@ -528,6 +605,12 @@
                     <div class="captured-title">Captured (Black)</div>
                     <div id="capturedBlack" class="captured-pieces"></div>
                 </div>
+                <div class="last-move-section">
+                    <div class="captured-title">Last Move</div>
+                    <div id="lastMoveWhite" class="last-move-item">White: -</div>
+                    <div id="lastMoveBlack" class="last-move-item">Black: -</div>
+                    <div id="undoButton" class="undo-button" onclick="undoLastMove()">UNDO LAST MOVE</div>
+                </div>
             </div>
         </div>
     </div>
@@ -545,6 +628,20 @@
             <button class="game-over-button" onclick="restartGame()">NEW GAME</button>
         </div>
     </div>
+
+    <!-- Undo Preference Modal -->
+    <div id="undoModal" class="undo-modal hidden">
+        <div class="undo-modal-content">
+            <div class="undo-modal-title">Enable Undo?</div>
+            <div class="undo-modal-text">
+                If either player says YES, undo will be available for both.
+            </div>
+            <div class="undo-modal-actions">
+                <button class="undo-modal-button" onclick="handleUndoChoice(true)">YES</button>
+                <button class="undo-modal-button" onclick="handleUndoChoice(false)">NO</button>
+            </div>
+        </div>
+    </div>
     
     <script>
         const socket = io(window.location.origin, {
@@ -558,6 +655,9 @@
         let validMoves = [];
         let pendingPromotion = null; // {pieceIndex, color, location}
         let checkFlashCounter = 0; // Counter for flashing check indicator
+        let allowUndo = false;
+        let lastMoveSnapshot = null;
+        let pendingUndoCallback = null;
         let gameState = {
             whitePieces: [],
             whiteLocations: [],
@@ -573,7 +673,9 @@
             whiteEp: [100, 100],
             blackEp: [100, 100],
             inCheck: false,
-            checkedKing: null // {color: 'white' or 'black', location: [col, row]}
+            checkedKing: null, // {color: 'white' or 'black', location: [col, row]}
+            lastMoves: { white: '', black: '' },
+            allowUndo: false
         };
         let currentMode = null;
         
@@ -625,12 +727,14 @@
         // Menu Functions
         function startLocalPvP() {
             currentMode = 'local';
-            document.getElementById('menuScreen').classList.add('hidden');
-            document.getElementById('gameScreen').classList.remove('hidden');
-            initializeGameState();
-            initBoard();
-            updateBoardDisplay();
-            updateStatus();
+            showUndoPrompt(() => {
+                document.getElementById('menuScreen').classList.add('hidden');
+                document.getElementById('gameScreen').classList.remove('hidden');
+                initializeGameState();
+                initBoard();
+                updateBoardDisplay();
+                updateStatus();
+            });
         }
         
         function showOnlineMenu() {
@@ -689,6 +793,8 @@
             playerColor = null;
             selectedSquare = null;
             validMoves = [];
+            allowUndo = false;
+            lastMoveSnapshot = null;
             gameState = {};
             pendingPromotion = null;
             
@@ -696,6 +802,11 @@
             if (promotionOverlay) {
                 promotionOverlay.classList.add('hidden');
             }
+            const undoModal = document.getElementById('undoModal');
+            if (undoModal) {
+                undoModal.classList.add('hidden');
+            }
+            updateUndoUI();
             
             document.getElementById('gameScreen').classList.add('hidden');
             document.getElementById('menuScreen').classList.remove('hidden');
@@ -795,6 +906,135 @@
                 }
             }
             return null;
+        }
+
+
+        function coordsToNotation(col, row) {
+            const files = 'abcdefgh';
+            const file = files[col] || '?';
+            const rank = row + 1;
+            return `${file}${rank}`;
+        }
+
+        function updateLastMoveDisplay() {
+            const whiteEl = document.getElementById('lastMoveWhite');
+            const blackEl = document.getElementById('lastMoveBlack');
+            const whiteMove = gameState.lastMoves && gameState.lastMoves.white ? gameState.lastMoves.white : '';
+            const blackMove = gameState.lastMoves && gameState.lastMoves.black ? gameState.lastMoves.black : '';
+            if (whiteEl) whiteEl.textContent = `White: ${whiteMove || '-'}`;
+            if (blackEl) blackEl.textContent = `Black: ${blackMove || '-'}`;
+        }
+
+        function recordLastMove(color, fromRow, fromCol, toRow, toCol) {
+            if (!gameState.lastMoves) {
+                gameState.lastMoves = { white: '', black: '' };
+            }
+            const from = coordsToNotation(fromCol, fromRow);
+            const to = coordsToNotation(toCol, toRow);
+            gameState.lastMoves[color] = `${from} -> ${to}`;
+            updateLastMoveDisplay();
+        }
+
+        function updateUndoUI() {
+            const btn = document.getElementById('undoButton');
+            if (btn) {
+                btn.style.display = allowUndo ? 'block' : 'none';
+            }
+        }
+
+        function showUndoPrompt(onDone) {
+            pendingUndoCallback = onDone || null;
+            const modal = document.getElementById('undoModal');
+            if (modal) {
+                modal.classList.remove('hidden');
+            }
+        }
+
+        function handleUndoChoice(enabled) {
+            const modal = document.getElementById('undoModal');
+            if (modal) {
+                modal.classList.add('hidden');
+            }
+            allowUndo = !!enabled;
+            gameState.allowUndo = allowUndo;
+            updateUndoUI();
+            if (currentMode === 'online' && roomCode) {
+                socket.emit('undo_preference', { room_code: roomCode, enabled: allowUndo });
+            }
+            if (pendingUndoCallback) {
+                const cb = pendingUndoCallback;
+                pendingUndoCallback = null;
+                cb();
+            }
+        }
+
+        function applyUndoSetting(enabled) {
+            if (enabled) {
+                allowUndo = true;
+            } else if (!allowUndo) {
+                allowUndo = false;
+            }
+            gameState.allowUndo = allowUndo;
+            updateUndoUI();
+        }
+
+        function snapshotGameState() {
+            return {
+                whitePieces: gameState.whitePieces.slice(),
+                whiteLocations: cloneLocations(gameState.whiteLocations),
+                blackPieces: gameState.blackPieces.slice(),
+                blackLocations: cloneLocations(gameState.blackLocations),
+                whiteMoved: Array.isArray(gameState.whiteMoved) ? gameState.whiteMoved.slice() : [],
+                blackMoved: Array.isArray(gameState.blackMoved) ? gameState.blackMoved.slice() : [],
+                capturedPiecesWhite: gameState.capturedPiecesWhite.slice(),
+                capturedPiecesBlack: gameState.capturedPiecesBlack.slice(),
+                turnStep: gameState.turnStep,
+                gameOver: gameState.gameOver,
+                winner: gameState.winner,
+                whiteEp: gameState.whiteEp ? gameState.whiteEp.slice() : [100, 100],
+                blackEp: gameState.blackEp ? gameState.blackEp.slice() : [100, 100],
+                lastMoves: gameState.lastMoves ? { ...gameState.lastMoves } : { white: '', black: '' }
+            };
+        }
+
+        function restoreSnapshot(snapshot) {
+            if (!snapshot) return;
+            gameState.whitePieces = snapshot.whitePieces.slice();
+            gameState.whiteLocations = cloneLocations(snapshot.whiteLocations);
+            gameState.blackPieces = snapshot.blackPieces.slice();
+            gameState.blackLocations = cloneLocations(snapshot.blackLocations);
+            gameState.whiteMoved = Array.isArray(snapshot.whiteMoved) ? snapshot.whiteMoved.slice() : [];
+            gameState.blackMoved = Array.isArray(snapshot.blackMoved) ? snapshot.blackMoved.slice() : [];
+            gameState.capturedPiecesWhite = snapshot.capturedPiecesWhite.slice();
+            gameState.capturedPiecesBlack = snapshot.capturedPiecesBlack.slice();
+            gameState.turnStep = snapshot.turnStep;
+            gameState.gameOver = snapshot.gameOver;
+            gameState.winner = snapshot.winner;
+            gameState.whiteEp = snapshot.whiteEp.slice();
+            gameState.blackEp = snapshot.blackEp.slice();
+            gameState.inCheck = false;
+            gameState.checkedKing = null;
+            gameState.lastMoves = snapshot.lastMoves ? { ...snapshot.lastMoves } : { white: '', black: '' };
+            ensureMovedArrays();
+            pendingPromotion = null;
+            const overlay = document.getElementById('promotionOverlay');
+            if (overlay) {
+                overlay.classList.add('hidden');
+            }
+            updateBoardDisplay();
+            updateCapturedPieces();
+            updateLastMoveDisplay();
+            updateStatus();
+        }
+
+        function undoLastMove() {
+            if (!allowUndo || !lastMoveSnapshot || pendingPromotion || gameState.gameOver) return;
+            const snapshot = lastMoveSnapshot;
+            lastMoveSnapshot = null;
+            restoreSnapshot(snapshot);
+            if (currentMode === 'online' && roomCode) {
+                socket.emit('undo_move', { room_code: roomCode, snapshot });
+            }
         }
 
         function cloneLocations(locations) {
@@ -1191,6 +1431,9 @@
                                 gameState.whiteEp[0] === toCol && gameState.whiteEp[1] === toRow);
             
             // Update local state
+            if (allowUndo) {
+                lastMoveSnapshot = snapshotGameState();
+            }
             updateLocalMove(fromPos, toPos, isEnPassant);
             
             if (currentMode === 'online' && roomCode) {
@@ -1277,6 +1520,8 @@
                                 gameState.whiteMoved[rookIndex] = true;
                             }
                         }
+
+                        recordLastMove('white', fromRow, fromCol, toRow, toCol);
                         
                         // Check for pawn promotion
                         if (pieceType === 'pawn' && toRow === 7) {
@@ -1336,6 +1581,8 @@
                                 gameState.blackMoved[rookIndex] = true;
                             }
                         }
+
+                        recordLastMove('black', fromRow, fromCol, toRow, toCol);
                         
                         // Check for pawn promotion
                         if (pieceType === 'pawn' && toRow === 0) {
@@ -1664,10 +1911,15 @@
                 whiteEp: [100, 100],
                 blackEp: [100, 100],
                 inCheck: false,
-                checkedKing: null
+                checkedKing: null,
+                lastMoves: { white: '', black: '' },
+                allowUndo: allowUndo
             };
             checkFlashCounter = 0;
+            lastMoveSnapshot = null;
             updateCapturedPieces();
+            updateLastMoveDisplay();
+            updateUndoUI();
         }
         
         function updateStatus(message) {
@@ -1697,37 +1949,60 @@
         socket.on('connect', () => {
             console.log('Connected to server');
         });
+
+        socket.on('undo_setting', (data) => {
+            if (data && data.enabled) {
+                applyUndoSetting(true);
+            }
+        });
+
+        socket.on('undo_move', (data) => {
+            if (data && data.snapshot) {
+                lastMoveSnapshot = null;
+                restoreSnapshot(data.snapshot);
+            }
+        });
         
         socket.on('room_created', (data) => {
             roomCode = data.room_code;
             playerColor = data.color;
             currentMode = 'online';
+            if (data.undo_enabled) {
+                applyUndoSetting(true);
+            }
             document.getElementById('roomCodeText').textContent = roomCode;
             document.getElementById('roomCodeDisplay').style.display = 'block';
             document.getElementById('menuScreen').classList.add('hidden');
             document.getElementById('gameScreen').classList.remove('hidden');
-            initializeGameState();
-            initBoard();
-            updateBoardDisplay();
-            document.getElementById('statusMessage').textContent = 'Waiting for opponent...';
+            showUndoPrompt(() => {
+                initializeGameState();
+                initBoard();
+                updateBoardDisplay();
+                document.getElementById('statusMessage').textContent = 'Waiting for opponent...';
+            });
         });
         
         socket.on('joined_room', (data) => {
             roomCode = data.room_code;
             playerColor = data.color;
             currentMode = 'online';
+            if (data.undo_enabled) {
+                applyUndoSetting(true);
+            }
             document.getElementById('roomCodeText').textContent = roomCode;
             document.getElementById('roomCodeDisplay').style.display = 'block';
             document.getElementById('menuScreen').classList.add('hidden');
             document.getElementById('gameScreen').classList.remove('hidden');
-            initializeGameState();
-            initBoard();
-            updateBoardDisplay();
-            if (data.status === 'ready') {
-                document.getElementById('statusMessage').textContent = 'Game starting!';
-            } else {
-                document.getElementById('statusMessage').textContent = 'Waiting for opponent...';
-            }
+            showUndoPrompt(() => {
+                initializeGameState();
+                initBoard();
+                updateBoardDisplay();
+                if (data.status === 'ready') {
+                    document.getElementById('statusMessage').textContent = 'Game starting!';
+                } else {
+                    document.getElementById('statusMessage').textContent = 'Waiting for opponent...';
+                }
+            });
         });
         
         socket.on('game_start', () => {
@@ -1737,6 +2012,9 @@
         });
         
         socket.on('opponent_move', (data) => {
+            if (allowUndo) {
+                lastMoveSnapshot = snapshotGameState();
+            }
             if (data.game_state) {
                 const gs = data.game_state;
                 gameState.whitePieces = gs.whitePieces || gs.white_pieces || gameState.whitePieces;
@@ -1752,9 +2030,14 @@
                 gameState.blackEp = gs.blackEp || gs.black_ep || gameState.blackEp || [100, 100];
                 gameState.whiteMoved = gs.whiteMoved || gs.white_moved || gameState.whiteMoved;
                 gameState.blackMoved = gs.blackMoved || gs.black_moved || gameState.blackMoved;
+                gameState.lastMoves = gs.lastMoves || gs.last_moves || gameState.lastMoves;
+                if (gs.allowUndo || gs.allow_undo) {
+                    applyUndoSetting(true);
+                }
                 ensureMovedArrays();
                 updateBoardDisplay();
                 updateCapturedPieces();
+                updateLastMoveDisplay();
             } else if (data.from_pos && data.to_pos) {
                 updateLocalMove(data.from_pos, data.to_pos, data.is_en_passant || false);
             }
@@ -1777,9 +2060,14 @@
                 gameState.blackEp = gs.blackEp || gs.black_ep || gameState.blackEp || [100, 100];
                 gameState.whiteMoved = gs.whiteMoved || gs.white_moved || gameState.whiteMoved;
                 gameState.blackMoved = gs.blackMoved || gs.black_moved || gameState.blackMoved;
+                gameState.lastMoves = gs.lastMoves || gs.last_moves || gameState.lastMoves;
+                if (gs.allowUndo || gs.allow_undo) {
+                    applyUndoSetting(true);
+                }
                 ensureMovedArrays();
                 updateBoardDisplay();
                 updateCapturedPieces();
+                updateLastMoveDisplay();
             }
         });
         
@@ -1808,8 +2096,13 @@
                 gameState.blackLocations = (gs.blackLocations || gs.black_locations || gameState.blackLocations).map(loc => Array.isArray(loc) ? loc : [loc[0], loc[1]]);
                 gameState.whiteMoved = gs.whiteMoved || gs.white_moved || gameState.whiteMoved;
                 gameState.blackMoved = gs.blackMoved || gs.black_moved || gameState.blackMoved;
+                gameState.lastMoves = gs.lastMoves || gs.last_moves || gameState.lastMoves;
+                if (gs.allowUndo || gs.allow_undo) {
+                    applyUndoSetting(true);
+                }
                 ensureMovedArrays();
                 updateBoardDisplay();
+                updateLastMoveDisplay();
             }
         });
         
